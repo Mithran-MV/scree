@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # The gate is not a test. It measures the terrain and stops the build if
+      # the map would be claiming shape it does not have.
+      - run: npm run gate -- --json artifacts/geometry.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geometry
+          path: artifacts/geometry.json
+      - run: npm run build
