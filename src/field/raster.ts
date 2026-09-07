@@ -64,6 +64,8 @@ export interface Raster {
   /** Index into the basket array that binds at each cell, or -1 if none does. */
   argmin: Int16Array;
   deploymentIds: string[];
+  /** Finite elevation range actually present, for scaling the display. */
+  range: { min: number; max: number };
 }
 
 /**
@@ -94,11 +96,25 @@ export function rasterize(baskets: readonly Basket[], w: Window): Raster {
     }
   }
 
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < z.length; i++) {
+    const v = z[i]!;
+    if (!Number.isFinite(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  if (!Number.isFinite(min)) {
+    min = 0;
+    max = 1;
+  }
+
   return {
     window: w,
     z,
     argmin,
     deploymentIds: baskets.map((b) => b.deploymentId),
+    range: { min, max },
   };
 }
 

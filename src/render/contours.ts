@@ -80,20 +80,38 @@ export function contour(r: Raster, level: number): ContourLine {
 }
 
 /**
- * A set of contours at a fixed interval, plus the shoreline at zero.
+ * A set of contours across the range the terrain actually occupies, plus the
+ * shoreline at zero.
  *
  * Zero is always included and is never merely one line among many: it is the
  * only level on the map that corresponds to an event rather than a reading.
+ * The interval is chosen from the range so that a book with a hand's breadth
+ * of headroom gets as many lines as one with a mile of it.
  */
-export function contourSet(r: Raster, interval = 0.05, ceiling = 1.0): ContourLine[] {
+export function contourSet(r: Raster, interval?: number, ceiling?: number): ContourLine[] {
+  const top = ceiling ?? Math.max(0.05, r.range.max);
+  const floor = Math.max(r.range.min, -0.6);
+  const step = interval ?? niceInterval(top - floor, 14);
+
   const lines: ContourLine[] = [contour(r, 0)];
-  for (let level = interval; level <= ceiling; level += interval) {
+  for (let level = step; level <= top; level += step) {
     lines.push(contour(r, Number(level.toFixed(6))));
   }
-  for (let level = -interval; level >= -0.5; level -= interval) {
+  for (let level = -step; level >= floor; level -= step) {
     lines.push(contour(r, Number(level.toFixed(6))));
   }
   return lines;
+}
+
+/** The roundest 1, 2 or 5 times a power of ten that gives about `target` lines. */
+export function niceInterval(span: number, target: number): number {
+  if (!Number.isFinite(span) || span <= 0) return 0.05;
+  const rough = span / target;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  for (const multiple of [1, 2, 5, 10]) {
+    if (multiple * magnitude >= rough) return multiple * magnitude;
+  }
+  return 10 * magnitude;
 }
 
 function at(r: Raster, col: number, row: number): number {

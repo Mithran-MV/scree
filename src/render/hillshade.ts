@@ -8,7 +8,12 @@ export interface ShadeOptions {
   altitude?: number;
   /** Vertical exaggeration. Terrain this shallow is invisible without it. */
   exaggeration?: number;
-  /** Elevation the top of the palette represents. */
+  /**
+   * Elevation the top of the palette represents. Defaults to the highest
+   * ground actually present, because a book whose best health factor is 1.16
+   * would otherwise be painted entirely in the first sixth of the land ramp
+   * and read as featureless.
+   */
   ceiling?: number;
 }
 
@@ -24,8 +29,12 @@ export function hillshade(r: Raster, opts: ShadeOptions = {}): ImageDataLike {
   const { width, height } = r.window;
   const azimuth = ((opts.azimuth ?? 315) * Math.PI) / 180;
   const altitude = ((opts.altitude ?? 45) * Math.PI) / 180;
-  const exaggeration = opts.exaggeration ?? 140;
-  const ceiling = opts.ceiling ?? 1.0;
+  // Relief is exaggerated relative to the range on show, so a shallow book
+  // is lit as legibly as a steep one without the light implying a gradient
+  // that is not there.
+  const span = Math.max(0.05, r.range.max - Math.max(r.range.min, -0.5));
+  const exaggeration = opts.exaggeration ?? 12 / span;
+  const ceiling = opts.ceiling ?? Math.max(0.05, r.range.max);
 
   const pixels = new Uint8ClampedArray(new ArrayBuffer(width * height * 4));
   const zenith = Math.PI / 2 - altitude;

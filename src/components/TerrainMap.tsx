@@ -42,7 +42,7 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const shaded = hillshade(raster, { exaggeration: 160 });
+    const shaded = hillshade(raster);
     const image = new ImageData(shaded.data, shaded.width, shaded.height);
 
     // The raster is computed at a modest resolution and scaled up for display.
@@ -68,7 +68,7 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
     const sy = SIZE / (win.height - 1);
     const toScreen = (x: number, y: number): [number, number] => [x * sx, SIZE - y * sy];
 
-    for (const line of contourSet(raster, 0.05)) {
+    for (const line of contourSet(raster)) {
       const shoreline = line.level === 0;
       ctx.strokeStyle = shoreline ? "rgba(20,32,48,0.85)" : "rgba(40,50,40,0.22)";
       ctx.lineWidth = shoreline ? 1.6 : 0.7;
