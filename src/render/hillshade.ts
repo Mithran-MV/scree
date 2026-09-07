@@ -27,7 +27,7 @@ export function hillshade(r: Raster, opts: ShadeOptions = {}): ImageDataLike {
   const exaggeration = opts.exaggeration ?? 140;
   const ceiling = opts.ceiling ?? 1.0;
 
-  const pixels = new Uint8ClampedArray(width * height * 4);
+  const pixels = new Uint8ClampedArray(new ArrayBuffer(width * height * 4));
   const zenith = Math.PI / 2 - altitude;
 
   for (let row = 0; row < height; row++) {
@@ -61,11 +61,15 @@ export function hillshade(r: Raster, opts: ShadeOptions = {}): ImageDataLike {
   return { width, height, data: pixels };
 }
 
-/** Structurally an ImageData, without needing a DOM to construct one. */
+/**
+ * Structurally an ImageData, without needing a DOM to construct one, so the
+ * shading is testable in plain Node. The buffer is pinned to a plain
+ * ArrayBuffer so it can be handed straight to the real `ImageData`.
+ */
 export interface ImageDataLike {
   width: number;
   height: number;
-  data: Uint8ClampedArray;
+  data: Uint8ClampedArray<ArrayBuffer>;
 }
 
 function sampleZ(r: Raster, col: number, row: number): number {
