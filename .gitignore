@@ -16,3 +16,6 @@ SPEC_*.md
 GEOMETRY_PATCH.md
 notes/
 *.xlsx
+
+# next
+next-env.d.ts
