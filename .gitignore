@@ -19,3 +19,8 @@ notes/
 
 # next
 next-env.d.ts
+
+# Editor and agent tooling
+.claude/
+.vscode/
+.idea/
