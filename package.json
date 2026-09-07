@@ -11,7 +11,10 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "gate": "tsx scripts/geometry-gate.ts",
-    "verify:subgraphs": "tsx scripts/verify-subgraphs.ts"
+    "verify:subgraphs": "tsx scripts/verify-subgraphs.ts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
