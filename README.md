@@ -6,8 +6,6 @@ Every lending app reduces your risk to a single number: *"liquidated at $3,434."
 That number is a scalar standing in for a field, and it is most wrong exactly
 when it matters. Scree renders the field.
 
-<!-- screenshot -->
-
 ## The map
 
 | Axis | Meaning |
