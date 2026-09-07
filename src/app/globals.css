@@ -71,7 +71,9 @@ a { color: var(--accent); }
 .plate canvas {
   display: block;
   width: 100%;
+  max-width: 560px;
   height: auto;
+  margin: 0 auto;
   image-rendering: auto;
   cursor: crosshair;
 }

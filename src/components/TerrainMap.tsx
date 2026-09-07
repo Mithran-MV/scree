@@ -6,6 +6,7 @@ import { rasterize, windowAt, priceAt, dwellAt, colOfPrice } from "@/field/raste
 import { extractFeatures } from "@/field/features";
 import { hillshade } from "@/render/hillshade";
 import { contourSet } from "@/render/contours";
+import { foldPaths, ridgePath } from "@/render/overlays";
 import { sample } from "@/field/raster";
 
 export interface Readout {
@@ -79,6 +80,37 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
       }
+      ctx.stroke();
+    }
+
+    // Fold lines: where the deployment closest to killing you hands over. These
+    // are drawn from the argmin partition, so a map with no handover has no
+    // lines to draw and cannot pretend otherwise.
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "rgba(30,40,60,0.55)";
+    ctx.lineWidth = 1;
+    for (const fold of foldPaths(raster)) {
+      ctx.beginPath();
+      fold.points.forEach((p, i) => {
+        const [x, y] = toScreen(p.col, p.row);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // The ridge, traced row by row rather than assumed vertical.
+    if (features.boundaryPass) {
+      const ridge = ridgePath(raster);
+      ctx.strokeStyle = "rgba(182,82,42,0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ridge.forEach((p, i) => {
+        const [x, y] = toScreen(p.col, p.row);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
       ctx.stroke();
     }
 
