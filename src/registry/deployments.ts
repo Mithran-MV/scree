@@ -6,6 +6,12 @@ import type { Deployment } from "../core/types";
  * They answer in one schema dialect, which is the only reason a single query
  * can cover four networks and three protocols. Adding a deployment here is the
  * whole cost of adding it to the map; there is no per-protocol adapter.
+ *
+ * UNVERIFIED: every `subgraphId` below is a placeholder until
+ * `npm run verify:subgraphs` has resolved it against the gateway and written
+ * `src/registry/verified.json`. Nothing may render live data from an id that
+ * has not passed that check. See `verificationStatus()` at the bottom of this
+ * file, which is what the interface asks before it trusts a deployment.
  */
 export const DEPLOYMENTS: Deployment[] = [
   {
@@ -82,4 +88,27 @@ export function parseSources(param: string | null): string[] | null {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * Which deployments have had their subgraph id resolved against the gateway.
+ *
+ * The map must never present numbers sourced from an unverified id, so this is
+ * consulted before a deployment contributes to the terrain. It reads the
+ * artifact written by `npm run verify:subgraphs`.
+ */
+export interface VerificationRecord {
+  deploymentId: string;
+  ok: boolean;
+  blockHeight: number | null;
+  checkedAt: string;
+  error?: string;
+}
+
+export function verifiedOnly(
+  deployments: readonly Deployment[],
+  records: readonly VerificationRecord[],
+): Deployment[] {
+  const good = new Set(records.filter((r) => r.ok).map((r) => r.deploymentId));
+  return deployments.filter((d) => good.has(d.id));
 }
