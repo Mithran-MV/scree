@@ -185,7 +185,7 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
       id: mark.deploymentId,
       share: mark.share,
       left: `${fx * 100}%`,
-      top: `${Math.min(0.92, fy) * 100}%`,
+      top: `${Math.min(0.94, Math.max(0.16, fy)) * 100}%`,
       order: i,
     };
   });
@@ -219,7 +219,7 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
           className="pass-name"
           style={{
             left: `${(passSpot.x / WORLD_W) * 100}%`,
-            top: `${Math.min(0.9, passTop) * 100}%`,
+            top: `${Math.min(0.9, Math.max(0.16, passTop)) * 100}%`,
           }}
         >
           THE PASS
