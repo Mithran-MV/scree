@@ -1,15 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Basket } from "@/core/types";
 import { bracket } from "@/core/bracket";
 import { rasterize, fittedWindow, colOfPrice, priceAt, dwellAt, sample } from "@/field/raster";
 import { extractFeatures } from "@/field/features";
-import { niceInterval } from "@/render/contours";
-import { paintGround } from "@/arcane/chart";
-import { drawContours, drawLeyVeins, drawRidge } from "@/arcane/leylines";
-import { drawCitadel, drawStandingStone, drawWardGate } from "@/arcane/citadels";
 import { findLandmarks } from "@/world/landmarks";
+import {
+  blit,
+  chartSizeFor,
+  citadelFor,
+  drawBeacon,
+  drawContourRings,
+  drawFurniture,
+  drawLeyNetwork,
+  drawShoreline,
+  leyNetwork,
+  paintGround,
+  placeFurniture,
+  sampleField,
+  WARD_CIRCLE,
+  type Placed,
+} from "@/arcane/pixelchart";
 
 export interface ChartReadout {
   price: number;
@@ -26,10 +38,13 @@ interface Props {
   children?: React.ReactNode;
 }
 
+/** Whole-number upscale. Anything else would soften the pixels. */
+const SCALE = 4;
+
 export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [box, setBox] = useState({ w: 1200, h: 700 });
+  const [aspect, setAspect] = useState(2.2);
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -37,11 +52,8 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
     const measure = () => {
       const rect = host.getBoundingClientRect();
       if (rect.width < 2 || rect.height < 2) return;
-      setBox((held) =>
-        Math.abs(held.w - rect.width) < 1 && Math.abs(held.h - rect.height) < 1
-          ? held
-          : { w: Math.round(rect.width), h: Math.round(rect.height) },
-      );
+      const next = rect.width / rect.height;
+      setAspect((held) => (Math.abs(held - next) < 0.02 ? held : next));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -56,15 +68,16 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
   const raster = useMemo(() => rasterize(baskets, win), [baskets, win]);
   const features = useMemo(() => extractFeatures(raster), [raster]);
   const landmarks = useMemo(() => findLandmarks(raster), [raster]);
-  const ceiling = useMemo(() => Math.max(0.05, raster.range.max), [raster]);
-  const interval = useMemo(() => niceInterval(ceiling, 14), [ceiling]);
+  const size = useMemo(() => chartSizeFor(aspect), [aspect]);
+  const field = useMemo(() => sampleField(raster, size), [raster, size]);
 
-  const project = useCallback(
-    (col: number, row: number): [number, number] => [
-      (col / (win.width - 1)) * box.w,
-      box.h - (row / (win.height - 1)) * box.h,
-    ],
-    [win.width, win.height, box.w, box.h],
+  const toChart = useMemo(
+    () =>
+      (col: number, row: number) => ({
+        x: Math.round((col / (win.width - 1)) * (size.width - 1)),
+        y: Math.round((1 - row / (win.height - 1)) * (size.height - 1)),
+      }),
+    [win.width, win.height, size.width, size.height],
   );
 
   useEffect(() => {
@@ -77,42 +90,59 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = Math.round(box.w * dpr);
-    canvas.height = Math.round(box.h * dpr);
-    canvas.style.width = `${box.w}px`;
-    canvas.style.height = `${box.h}px`;
+    const { width: W, height: H } = size;
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
 
-    /* ── bake the sheet: ground, contours, waterline ──────────────── */
-    const plate = document.createElement("canvas");
-    plate.width = canvas.width;
-    plate.height = canvas.height;
-    const pctx = plate.getContext("2d")!;
-    pctx.scale(dpr, dpr);
+    const stage = document.createElement("canvas");
+    stage.width = W;
+    stage.height = H;
+    const sctx = stage.getContext("2d")!;
 
-    const ground = paintGround(raster, Math.round(box.w), Math.round(box.h));
-    const groundCanvas = document.createElement("canvas");
-    groundCanvas.width = ground.width;
-    groundCanvas.height = ground.height;
-    groundCanvas
-      .getContext("2d")!
-      .putImageData(new ImageData(ground.data, ground.width, ground.height), 0, 0);
-    pctx.drawImage(groundCanvas, 0, 0, box.w, box.h);
+    /* ── bake the country ─────────────────────────────────────────── */
+    paintGround(sctx, field);
+    drawContourRings(sctx, field);
+    drawShoreline(sctx, field);
 
-    drawContours(pctx, raster, project, interval, ceiling);
+    const seats: Placed[] = landmarks.map((mark) => {
+      const sprite = citadelFor(mark.share);
+      const at = toChart(mark.col, mark.row);
+      const w = sprite.art[0]?.length ?? 0;
+      const h = sprite.art.length;
+      return {
+        sprite,
+        x: Math.min(W - w - 1, Math.max(1, at.x - (w >> 1))),
+        y: Math.min(H - h - 1, Math.max(1, at.y - h)),
+      };
+    });
 
-    const baked = plate;
-
-    /* ── the live layers ──────────────────────────────────────────── */
-    const liveAt = project(colOfPrice(win, spot), 0);
     const passAt =
       features.pass && features.boundaryPass
-        ? project(features.pass.column, features.pass.row)
+        ? toChart(features.pass.column, features.pass.row)
         : null;
-    const citadels = landmarks.map((mark) => ({
-      at: project(mark.col, mark.row),
-      share: mark.share,
+    const wardAt = passAt
+      ? {
+          x: Math.min(W - 10, Math.max(1, passAt.x - 4)),
+          y: Math.min(H - 8, Math.max(1, passAt.y - 3)),
+        }
+      : null;
+
+    const keepOut = [...seats];
+    if (wardAt) keepOut.push({ sprite: WARD_CIRCLE, x: wardAt.x, y: wardAt.y });
+
+    drawFurniture(sctx, placeFurniture(field, keepOut));
+    drawFurniture(sctx, seats);
+    if (wardAt) blit(sctx, WARD_CIRCLE, wardAt.x, wardAt.y);
+
+    const baked = sctx.getImageData(0, 0, W, H);
+
+    /* ── the live layers ──────────────────────────────────────────── */
+    const nodes = seats.map((seat) => ({
+      x: seat.x + ((seat.sprite.art[0]?.length ?? 0) >> 1),
+      y: seat.y + seat.sprite.art.length - 2,
     }));
+    const lines = leyNetwork(field, nodes, passAt);
+    const live = toChart(Math.round(colOfPrice(win, spot)), 0);
 
     let raf = 0;
     let start = 0;
@@ -120,27 +150,33 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
     const frame = (now: number) => {
       if (!start) start = now;
       const t = (now - start) / 1000;
-      // One slow breath drives every glow on the sheet, so nothing beats
-      // against anything else.
-      const pulse = 0.5 + 0.5 * Math.sin(t * 1.15);
+      // One slow breath drives every glow, so nothing beats against anything else.
+      const pulse = 0.5 + 0.5 * Math.sin(t * 1.05);
 
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(baked, 0, 0);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sctx.putImageData(baked, 0, 0);
+      drawLeyNetwork(sctx, lines, pulse);
+      for (const seat of seats) {
+        drawBeacon(sctx, seat.x + ((seat.sprite.art[0]?.length ?? 0) >> 1), seat.y, pulse);
+      }
 
-      drawLeyVeins(ctx, raster, project, pulse);
-      if (features.boundaryPass) drawRidge(ctx, raster, project);
-      for (const c of citadels) drawCitadel(ctx, c.at[0], c.at[1], c.share, pulse);
-      if (passAt) drawWardGate(ctx, passAt[0], passAt[1], pulse);
-      drawStandingStone(ctx, liveAt[0], Math.min(liveAt[1] - 6, box.h - 14), pulse);
+      // Where you stand: the one cold light on a chart lit entirely in gold.
+      const ly = Math.min(H - 4, Math.max(3, live.y - 2));
+      sctx.fillStyle = `rgba(87,214,232,${0.16 + 0.16 * pulse})`;
+      sctx.beginPath();
+      sctx.arc(live.x, ly, 4 + 3 * pulse, 0, Math.PI * 2);
+      sctx.fill();
+      sctx.fillStyle = "#d9f7ff";
+      sctx.fillRect(live.x - 1, ly - 3, 2, 6);
+      sctx.fillRect(live.x - 3, ly - 1, 6, 2);
 
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(stage, 0, 0, W * SCALE, H * SCALE);
       raf = requestAnimationFrame(frame);
     };
 
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [raster, features, landmarks, win, spot, box, project, interval, ceiling]);
+  }, [field, size, landmarks, features, win, spot, toChart]);
 
   function move(event: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
@@ -155,22 +191,17 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
   }
 
   // Keep floating names out of the gutters the chrome occupies.
-  const place = (at: [number, number], nudge: number) => {
-    let left = at[0] / box.w;
-    let top = at[1] / box.h;
-    // The ledger owns the eastern column and the rail the northern strip; a
-    // plaque that would land under either is walked clear rather than hidden.
-    if (left > 0.58) left = 0.58;
-    if (top < 0.34) top = 0.34 + nudge;
-    return {
-      left: `${left * 100}%`,
-      top: `${Math.min(0.84, Math.max(0.2, top)) * 100}%`,
-    };
+  const place = (at: { x: number; y: number }, nudge: number) => {
+    let left = at.x / size.width;
+    let top = at.y / size.height;
+    if (left > 0.82) left = 0.82;
+    if (top < 0.42) top = 0.42 + nudge;
+    return { left: `${left * 100}%`, top: `${Math.min(0.88, top) * 100}%` };
   };
 
   const passAt =
     features.pass && features.boundaryPass
-      ? project(features.pass.column, features.pass.row)
+      ? toChart(features.pass.column, features.pass.row)
       : null;
 
   return (
@@ -180,7 +211,7 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
         <span
           key={mark.deploymentId}
           className="sigil"
-          style={place(project(mark.col, mark.row), 0.08 * (i + 1))}
+          style={place(toChart(mark.col, mark.row), 0.09 * (i + 1))}
         >
           <b>{mark.deploymentId}</b>
           <em>{(mark.share * 100).toFixed(0)}% of the ground</em>
