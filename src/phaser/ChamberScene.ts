@@ -545,7 +545,7 @@ export class ChamberScene extends Phaser.Scene {
     this.layer.add(can);
 
     this.layer.add(
-      label(this, W / 2, H - 15, "PUBLIC POSITIONS ONLY · NO SIGNATURE · NO APPROVAL", {
+      label(this, W / 2, H - 14, "PUBLIC POSITIONS ONLY · NO SIGNATURE · NO APPROVAL", {
         size: 9,
         color: T.inkDim,
         alpha: 0.6,

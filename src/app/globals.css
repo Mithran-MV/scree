@@ -234,7 +234,7 @@ html, body {
 .readout-slot {
   position: absolute;
   left: 50%;
-  bottom: 8px;
+  bottom: 34px;
   transform: translateX(-50%);
   z-index: 3;
   font-family: var(--font-mono), ui-monospace, Menlo, monospace;
