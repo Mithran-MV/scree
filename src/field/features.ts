@@ -24,6 +24,10 @@ export interface Features {
   crestMonotone: boolean;
   /** How far each feature moves across the full dwell axis. */
   drift: Drift;
+  /** Cells where the binding deployment differs from the neighbour right or above. */
+  changeMask: Uint8Array;
+  /** Cells below sea level. */
+  underwaterMask: Uint8Array;
 }
 
 export interface PassPoint {
@@ -65,11 +69,13 @@ export function extractFeatures(r: Raster): Features {
     monoFraction: monotoneFraction(r),
     crestMonotone: isRamp(r),
     drift: measureDrift(r),
+    changeMask,
+    underwaterMask: underwater,
   };
 }
 
 /** Cells where the binding deployment differs from the neighbour right or above. */
-function buildChangeMask(r: Raster): Uint8Array {
+export function buildChangeMask(r: Raster): Uint8Array {
   const { width, height } = r.window;
   const mask = new Uint8Array(width * height);
   for (let row = 0; row < height; row++) {
