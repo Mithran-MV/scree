@@ -1,9 +1,24 @@
 import type { WorldPaint } from "./pixels";
-import { BOULDER, BROADLEAF, BUSH, CAIRN, FLOWERS, PINE, REEDS, STUMP } from "./sprites";
+import {
+  BIRCH,
+  BOULDER,
+  BROADLEAF,
+  BUSH,
+  CAIRN,
+  FLOWERS,
+  PINE,
+  PINE_TALL,
+  PINE_YOUNG,
+  REEDS,
+  STUMP,
+} from "./sprites";
 
 export type ScatterKind =
   | "pine"
+  | "pineTall"
+  | "pineYoung"
   | "broadleaf"
+  | "birch"
   | "boulder"
   | "flowers"
   | "reeds"
@@ -19,6 +34,9 @@ export interface ScatterItem {
 
 export const SCATTER_ART: Record<ScatterKind, string[]> = {
   pine: PINE,
+  pineTall: PINE_TALL,
+  pineYoung: PINE_YOUNG,
+  birch: BIRCH,
   broadleaf: BROADLEAF,
   boulder: BOULDER,
   flowers: FLOWERS,
@@ -71,14 +89,23 @@ export function scatterWorld(
 
       // What grows where. Each band mixes two or three species on a hash so the
       // cover reads as country rather than as a planted grid.
+      // Each band mixes several species on a hash, so the cover reads as
+      // country rather than as one sprite tiled across a stripe.
       const pick = hash(x, y, 4);
       let kind: ScatterKind;
-      if (nearWater) kind = pick > 0.7 ? "bush" : "reeds";
-      else if (height > 0.9) kind = pick > 0.62 ? "cairn" : "boulder";
-      else if (height > 0.74) kind = pick > 0.5 ? "boulder" : "pine";
-      else if (height > 0.48) kind = pick > 0.82 ? "stump" : "pine";
-      else if (height > 0.24) kind = pick > 0.55 ? "broadleaf" : pick > 0.3 ? "pine" : "bush";
-      else kind = pick > 0.62 ? "flowers" : pick > 0.34 ? "bush" : "broadleaf";
+      if (nearWater) {
+        kind = pick > 0.78 ? "bush" : pick > 0.62 ? "birch" : "reeds";
+      } else if (height > 0.9) {
+        kind = pick > 0.62 ? "cairn" : "boulder";
+      } else if (height > 0.74) {
+        kind = pick > 0.66 ? "boulder" : pick > 0.34 ? "pineYoung" : "pine";
+      } else if (height > 0.48) {
+        kind = pick > 0.86 ? "stump" : pick > 0.48 ? "pineTall" : "pine";
+      } else if (height > 0.24) {
+        kind = pick > 0.72 ? "broadleaf" : pick > 0.5 ? "birch" : pick > 0.24 ? "pine" : "bush";
+      } else {
+        kind = pick > 0.68 ? "flowers" : pick > 0.44 ? "bush" : pick > 0.2 ? "birch" : "broadleaf";
+      }
 
       items.push({ kind, x, y });
     }

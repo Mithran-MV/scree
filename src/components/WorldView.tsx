@@ -11,9 +11,12 @@ import { findLandmarks } from "@/world/landmarks";
 import {
   BANNER_COLOURS,
   drawBanner,
+  drawFields,
   drawJetty,
   drawMenhirs,
+  drawStreams,
   drawTrack,
+  drawWreckage,
 } from "@/world/detail";
 import {
   FIGURE_PALETTE,
@@ -127,12 +130,17 @@ export function WorldView({ baskets, spot, onHover, onFeatures, children }: Prop
     });
 
     // Order matters: ground first, then things standing on it, near last.
+    drawStreams(sctx, paint);
+    drawWreckage(sctx, paint);
     drawTrack(
       sctx,
       paint,
       holds.map((hold) => ({ x: hold.anchor.x, y: hold.anchor.y })),
     );
-    for (const hold of holds) drawJetty(sctx, paint, hold.anchor.x, hold.y + hold.h);
+    for (const hold of holds) {
+      drawJetty(sctx, paint, hold.anchor.x, hold.y + hold.h);
+      drawFields(sctx, paint, hold.x, hold.y + hold.h - 4);
+    }
 
     for (const item of scatterWorld(paint, holds)) {
       const art = SCATTER_ART[item.kind]!;
@@ -169,19 +177,35 @@ export function WorldView({ baskets, spot, onHover, onFeatures, children }: Prop
 
       const buffer = new ImageData(new Uint8ClampedArray(baked.data), W, H);
       const d = buffer.data;
+      // Cloud shadows drift west to east across the whole scene. Two slow
+      // waves at different rates so the pattern never visibly repeats.
+      const drift = t * 7;
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = y * W + x;
-          if (!paint.wet[i]) continue;
-          const s =
-            Math.sin(x * 0.31 + t * 1.1) +
-            Math.sin(y * 0.44 - t * 0.8) +
-            Math.sin((x + y) * 0.19 + t * 1.6);
-          if (s > 2.35) {
-            const o = i * 4;
-            d[o] = Math.min(255, d[o]! + 46);
-            d[o + 1] = Math.min(255, d[o + 1]! + 52);
-            d[o + 2] = Math.min(255, d[o + 2]! + 46);
+          const o = i * 4;
+
+          if (paint.wet[i]) {
+            const s =
+              Math.sin(x * 0.31 + t * 1.1) +
+              Math.sin(y * 0.44 - t * 0.8) +
+              Math.sin((x + y) * 0.19 + t * 1.6);
+            if (s > 2.35) {
+              d[o] = Math.min(255, d[o]! + 46);
+              d[o + 1] = Math.min(255, d[o + 1]! + 52);
+              d[o + 2] = Math.min(255, d[o + 2]! + 46);
+            }
+            continue;
+          }
+
+          const cloud =
+            Math.sin((x - drift) * 0.035 + y * 0.017) +
+            Math.sin((x - drift * 0.62) * 0.021 - y * 0.03);
+          if (cloud > 1.42) {
+            const shade = 0.86;
+            d[o] = d[o]! * shade;
+            d[o + 1] = d[o + 1]! * shade;
+            d[o + 2] = d[o + 2]! * shade;
           }
         }
       }
