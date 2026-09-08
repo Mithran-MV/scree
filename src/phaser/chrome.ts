@@ -121,33 +121,78 @@ export function label(
   return t;
 }
 
-/** A plaque pinned over the screen, naming something on the chart. */
+/**
+ * A vellum plaque, pinned over the screen.
+ *
+ * Every reading on the chart is printed on warm stock rather than set in glass:
+ * it separates hard from the cold light underneath, and it makes the labels
+ * read as something written down about the terrain rather than part of it.
+ */
 export function plaque(
   scene: Phaser.Scene,
   x: number,
   y: number,
   title: string,
   sub: string,
-  tone: number = T.ley,
+  tone: number = T.vellumEdge,
 ): Phaser.GameObjects.Container {
-  const titleText = label(scene, 0, 0, title, { size: 11, color: T.ink });
-  const subText = label(scene, 0, 13, sub, { size: 9.5, color: T.inkDim });
-  const w = Math.max(titleText.width, subText.width) + 18;
-  const h = sub ? 30 : 19;
+  const titleText = label(scene, 0, 0, title, { size: 11, color: T.vellumInk });
+  const subText = label(scene, 0, 13, sub, { size: 9.5, color: T.vellumInkDim });
+  const w = Math.max(titleText.width, subText.width) + 20;
+  const h = sub ? 31 : 20;
 
   const g = scene.add.graphics();
-  g.fillStyle(T.screenVoid, 0.92);
-  g.fillRoundedRect(0, -4, w, h, 3);
-  g.lineStyle(1, tone, 0.7);
-  g.strokeRoundedRect(0, -4, w, h, 3);
-  g.fillStyle(tone, 0.9);
-  g.fillRect(0, -4, 2, h);
+  // A hard shadow under the stock, so it sits above the map rather than in it.
+  g.fillStyle(0x000000, 0.45);
+  g.fillRoundedRect(2, -1, w, h, 2);
+  g.fillStyle(T.vellum, 1);
+  g.fillRoundedRect(0, -4, w, h, 2);
+  g.lineStyle(1, T.vellumLit, 0.9);
+  g.beginPath();
+  g.moveTo(1, -4 + h);
+  g.lineTo(1, -3);
+  g.lineTo(w - 1, -3);
+  g.strokePath();
+  g.lineStyle(1, T.vellumEdge, 1);
+  g.strokeRoundedRect(0, -4, w, h, 2);
+  g.fillStyle(tone, 1);
+  g.fillRect(0, -4, 3, h);
 
-  titleText.setPosition(9, -1);
-  subText.setPosition(9, 12);
+  titleText.setPosition(10, -1);
+  subText.setPosition(10, 12);
   if (!sub) subText.setVisible(false);
 
   return scene.add.container(x - w / 2, y, [g, titleText, subText]);
+}
+
+/** A sheet of the same stock, for the panels that sit over the map. */
+export function vellumPanel(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics();
+  g.fillStyle(0x000000, 0.42);
+  g.fillRoundedRect(x + 3, y + 3, w, h, 3);
+  g.fillStyle(T.vellum, 1);
+  g.fillRoundedRect(x, y, w, h, 3);
+  g.lineStyle(1, T.vellumLit, 0.85);
+  g.beginPath();
+  g.moveTo(x + 1.5, y + h - 2);
+  g.lineTo(x + 1.5, y + 1.5);
+  g.lineTo(x + w - 2, y + 1.5);
+  g.strokePath();
+  g.lineStyle(1, T.vellumEdge, 1);
+  g.strokeRoundedRect(x, y, w, h, 3);
+  // A rule down the binding edge, the way a printed card is trimmed.
+  g.lineStyle(1, T.vellumEdge, 0.55);
+  g.beginPath();
+  g.moveTo(x + 7, y + 6);
+  g.lineTo(x + 7, y + h - 6);
+  g.strokePath();
+  return g;
 }
 
 export interface ButtonOptions {

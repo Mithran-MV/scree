@@ -150,3 +150,59 @@ export const WARD_CIRCLE: Sprite = {
     "..g...g..",
   ],
 };
+
+/* ── the forest ──────────────────────────────────────────────────────── */
+
+const CONIFER: Palette = {
+  t: "#1c4a44", // shadowed needle
+  m: "#2a6f61", // mid needle
+  l: "#3f9a80", // lit needle
+  b: "#243a3a", // trunk
+  k: "#0e2530", // ground shadow
+};
+
+export const CONIFER_TALL: Sprite = {
+  palette: CONIFER,
+  art: [
+    "...l...",
+    "..lml..",
+    ".lmmml.",
+    "..lml..",
+    ".lmmml.",
+    "lmmtmml",
+    "..lml..",
+    "lmmtmml",
+    "...b...",
+    "...b...",
+  ],
+};
+
+export const CONIFER_MID: Sprite = {
+  palette: CONIFER,
+  art: ["..l..", ".lml.", "..l..", ".lml.", "lmtml", "..b..", "..b.."],
+};
+
+export const CONIFER_LOW: Sprite = {
+  palette: CONIFER,
+  art: ["..l..", ".lml.", "lmtml", "..b.."],
+};
+
+/** A drift of trees, so the canopy reads as woodland rather than a lattice. */
+export const CONIFER_CLUMP: Sprite = {
+  palette: CONIFER,
+  art: [
+    "...l.....l...",
+    "..lml...lml..",
+    ".lmmml.lmmml.",
+    "..lml.l.lml..",
+    ".lmmmlmlmmml.",
+    "lmtmlmmmlmtml",
+    "...b...b...b.",
+  ],
+};
+
+/** Something on the wing, high over the country. */
+export const WINGED: Sprite = {
+  palette: { w: "#b8dfe4", d: "#6d9aa2" },
+  art: ["w...w", ".wdw.", "..w.."],
+};

@@ -32,7 +32,13 @@ export const T = {
   /* type */
   ink: 0xdfeef2,
   inkDim: 0x8fa8b2,
-  vellum: 0xe8dcc0,
+
+  /* vellum: the label stock every reading is printed on */
+  vellum: 0xe4d5ad,
+  vellumLit: 0xf2e7c8,
+  vellumEdge: 0x9c8757,
+  vellumInk: 0x2b2418,
+  vellumInkDim: 0x5c4f36,
 
   /* accents */
   brass: 0xb08d4a,

@@ -10,7 +10,9 @@ import {
   drawShoreline,
   leyNetwork,
   paintGround,
+  placeForest,
   placeFurniture,
+  placeWinged,
   sampleField,
   WARD_CIRCLE,
   type Node,
@@ -88,9 +90,24 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
   const keepOut = [...seatSprites];
   if (wardAt) keepOut.push({ sprite: WARD_CIRCLE, x: wardAt.x, y: wardAt.y });
 
+  // Canopy first, then the landmarks that stand out of it, then the seats.
+  drawFurniture(ctx, placeForest(field));
   drawFurniture(ctx, placeFurniture(field, keepOut));
   drawFurniture(ctx, seatSprites);
   if (wardAt) blit(ctx, WARD_CIRCLE, wardAt.x, wardAt.y);
+  drawFurniture(ctx, placeWinged(field));
+
+  // The binding: this chart is read as a spread, so it has a spine.
+  const spine = Math.round(size.width / 2);
+  ctx.fillStyle = "rgba(6,18,24,0.5)";
+  ctx.fillRect(spine - 3, 0, 6, size.height);
+  ctx.fillStyle = "rgba(120,190,200,0.16)";
+  ctx.fillRect(spine, 0, 1, size.height);
+  for (let y = 0; y < size.height; y += 9) {
+    ctx.fillStyle = "rgba(6,18,24,0.55)";
+    ctx.fillRect(spine - 5, y, 2, 5);
+    ctx.fillRect(spine + 4, y + 4, 2, 5);
+  }
 
   const beacons = seatSprites.map((seat) => ({
     x: seat.x + ((seat.sprite.art[0]?.length ?? 0) >> 1),

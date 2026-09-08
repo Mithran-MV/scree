@@ -2,6 +2,10 @@ import type { Raster } from "../field/raster";
 import { seaDatumFor } from "../render/palette";
 import type { Sprite } from "./figures";
 import {
+  CONIFER_CLUMP,
+  CONIFER_LOW,
+  CONIFER_MID,
+  CONIFER_TALL,
   HILL,
   HOLDING,
   OBELISK,
@@ -12,6 +16,7 @@ import {
   TEMPLE,
   TOWER,
   WARD_CIRCLE,
+  WINGED,
   ZIGGURAT,
 } from "./terrain-sprites";
 
@@ -259,6 +264,66 @@ export function placeFurniture(field: ChartField, keepOut: Placed[]): Placed[] {
 
   // Painter's order: whatever is lower on the sheet is nearer, so it draws last.
   return placed.sort((a, b) => a.y - b.y);
+}
+
+/**
+ * The canopy.
+ *
+ * Laid on a tighter lattice than the landmarks and drawn under them, because a
+ * country with a few mountains on bare ground reads as a diagram while the same
+ * country under forest reads as somewhere. Species follow altitude: tall stands
+ * on the shoulders, low scrub near the water, clumps in the middle belt.
+ */
+export function placeForest(field: ChartField): Placed[] {
+  const { width: W, height: H } = field;
+  const trees: Placed[] = [];
+  const step = 7;
+
+  for (let gy = 2; gy < H - 8; gy += step) {
+    for (let gx = 2; gx < W - 14; gx += step) {
+      if (hash(gx, gy, 21) > 0.72) continue;
+      const x = gx + Math.floor(hash(gx, gy, 22) * (step - 1));
+      const y = gy + Math.floor(hash(gx, gy, 23) * (step - 1));
+      const i = y * W + x;
+      if (i < 0 || i >= field.z.length || field.wet[i]) continue;
+
+      const t = field.z[i]! / field.ceiling;
+      const pick = hash(x, y, 24);
+
+      // Above the treeline nothing grows, and the bare tops are the point.
+      if (t > 0.86) continue;
+
+      let sprite: Sprite;
+      if (t > 0.6) sprite = pick > 0.5 ? CONIFER_TALL : CONIFER_MID;
+      else if (t > 0.3) sprite = pick > 0.68 ? CONIFER_CLUMP : pick > 0.3 ? CONIFER_TALL : CONIFER_MID;
+      else sprite = pick > 0.55 ? CONIFER_MID : CONIFER_LOW;
+
+      const w = sprite.art[0]?.length ?? 0;
+      const h = sprite.art.length;
+      trees.push({
+        sprite,
+        x: Math.min(W - w - 1, Math.max(1, x - (w >> 1))),
+        y: Math.min(H - h - 1, Math.max(1, y - h)),
+      });
+    }
+  }
+  return trees.sort((a, b) => a.y - b.y);
+}
+
+/** A few things on the wing, high over the water and the tops. */
+export function placeWinged(field: ChartField): Placed[] {
+  const { width: W, height: H } = field;
+  const out: Placed[] = [];
+  for (let gy = 6; gy < H - 10; gy += 34) {
+    for (let gx = 8; gx < W - 10; gx += 41) {
+      if (hash(gx, gy, 31) > 0.42) continue;
+      const x = gx + Math.floor(hash(gx, gy, 32) * 20);
+      const y = gy + Math.floor(hash(gx, gy, 33) * 14);
+      if (x >= W - 6 || y >= H - 4) continue;
+      out.push({ sprite: WINGED, x, y });
+    }
+  }
+  return out;
 }
 
 /** The seat of a territory, sized by how much of the chart it holds. */
