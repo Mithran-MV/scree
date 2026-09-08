@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HACHURE_BUCKETS, cullAngleFor, drawHachures, hachureSeeds, slopeGainFor } from "./hachure";
 import { rasterize, renderWindow } from "../field/raster";
+import { extractFeatures } from "../field/features";
 import { niceInterval } from "./contours";
 import { CARRY_BOOK, LONG_ONLY_BOOK, SPOT_ETH_USD } from "../core/fixtures/carry-book";
 
@@ -72,14 +73,14 @@ describe("stroke geometry", () => {
 
   it("holds every stroke inside the declared length bounds", () => {
     for (const s of seeds) {
-      expect(s.length).toBeGreaterThanOrEqual(2.5);
-      expect(s.length).toBeLessThanOrEqual(11);
+      expect(s.length).toBeGreaterThanOrEqual(3);
+      expect(s.length).toBeLessThanOrEqual(9);
     }
   });
 
   it("keeps ink under Lehmann's ceiling", () => {
-    // 0.92 of half the 7px pitch, the widest a stroke is ever allowed to be.
-    for (const s of seeds) expect(s.half).toBeLessThanOrEqual((0.92 * 7) / 2 + 1e-9);
+    // 0.55 of half the 8px pitch, the widest a stroke is ever allowed to be.
+    for (const s of seeds) expect(s.half).toBeLessThanOrEqual((0.55 * 8) / 2 + 1e-9);
   });
 
   it("never seeds below the shoreline", () => {
@@ -101,6 +102,36 @@ describe("stroke geometry", () => {
       expect(b).toBeGreaterThanOrEqual(0);
       expect(b).toBeLessThan(HACHURE_BUCKETS);
     }
+  });
+});
+
+describe("the comb as a measurement", () => {
+  it("reverses direction across the ridge", () => {
+    // Water runs downhill away from a ridge on both sides. If the strokes did
+    // not reverse, they would be a texture laid over the surface rather than a
+    // reading of it — so this is the assertion that the relief is measured.
+    const features = extractFeatures(mixed);
+    expect(features.boundaryPass).toBe(true);
+    const ridgePx = features.pass!.column * (512 / (win.width - 1));
+
+    let leftPointingLeft = 0;
+    let leftPointingRight = 0;
+    let rightPointingLeft = 0;
+    let rightPointingRight = 0;
+    for (const s of seedsFor(mixed)) {
+      if (s.x < ridgePx) s.dx > 0 ? leftPointingRight++ : leftPointingLeft++;
+      else s.dx > 0 ? rightPointingRight++ : rightPointingLeft++;
+    }
+
+    expect(leftPointingLeft).toBeGreaterThan(leftPointingRight * 5);
+    expect(rightPointingRight).toBeGreaterThan(rightPointingLeft * 5);
+  });
+
+  it("runs one way on a book with only one way to die", () => {
+    // A one-sided book is a ramp. Every stroke must fall the same way.
+    const seeds = seedsFor(oneSided);
+    const rightward = seeds.filter((s) => s.dx > 0).length;
+    expect(Math.min(rightward, seeds.length - rightward)).toBe(0);
   });
 });
 
