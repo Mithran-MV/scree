@@ -124,6 +124,9 @@ export function Expedition(props: Props) {
         y: chart.height - 10,
       };
 
+      // The scene is added and started once, with its data. Listing it in the
+      // game config would auto-start it empty and then restart it mid-load,
+      // which leaves create() running before the sheets have arrived.
       const scene = new WorldScene();
       game = new PhaserLib.Game({
         type: PhaserLib.AUTO,
@@ -132,10 +135,9 @@ export function Expedition(props: Props) {
         pixelArt: true,
         scale: { mode: PhaserLib.Scale.RESIZE, width: "100%", height: "100%" },
         banner: false,
-        scene: [scene],
       });
 
-      game.scene.start("world", {
+      game.scene.add("world", scene, true, {
         chart,
         crashBinder: br.lowerBinder,
         pumpBinder: br.upperBinder,

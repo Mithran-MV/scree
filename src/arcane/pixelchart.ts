@@ -16,11 +16,8 @@ import {
   TEMPLE,
   TOWER,
   WARD_CIRCLE,
-  WINGED,
   ZIGGURAT,
 } from "./terrain-sprites";
-
-type Ctx = CanvasRenderingContext2D;
 
 /** Internal resolution. Everything is drawn here, then scaled up hard. */
 export const CHART_H = 216;
@@ -35,23 +32,6 @@ export function chartSizeFor(aspect: number): ChartSize {
 }
 
 /* ── the ground ──────────────────────────────────────────────────────── */
-
-const SEA = ["#0b2838", "#0f3446", "#144254", "#1a5064"];
-const LAND = ["#1f5062", "#27627a", "#2f7488", "#3a8a98", "#48a0a8", "#5ab8b8"];
-
-const BAYER = [
-  [0, 8, 2, 10],
-  [12, 4, 14, 6],
-  [3, 11, 1, 9],
-  [15, 7, 13, 5],
-];
-
-function band(t: number, steps: number, x: number, y: number): number {
-  const scaled = Math.min(0.9999, Math.max(0, t)) * (steps - 1);
-  const floor = Math.floor(scaled);
-  const frac = scaled - floor;
-  return floor + (frac > (BAYER[y & 3]![x & 3]! + 0.5) / 16 ? 1 : 0);
-}
 
 export interface ChartField {
   width: number;
@@ -97,105 +77,12 @@ export function sampleField(r: Raster, size: ChartSize): ChartField {
   };
 }
 
-export function paintGround(ctx: Ctx, field: ChartField): void {
-  const { width: W, height: H } = field;
-  const image = ctx.createImageData(W, H);
-  const d = image.data;
-
-  for (let py = 0; py < H; py++) {
-    for (let px = 0; px < W; px++) {
-      const i = py * W + px;
-      const z = field.z[i]!;
-      const hex = field.wet[i]
-        ? SEA[Math.min(SEA.length - 1, band(Math.min(1, -z / field.seaDatum), SEA.length, px, py))]!
-        : LAND[Math.min(LAND.length - 1, band(Math.min(1, z / field.ceiling), LAND.length, px, py))]!;
-
-      const n = parseInt(hex.slice(1), 16);
-      const o = i * 4;
-      d[o] = (n >> 16) & 255;
-      d[o + 1] = (n >> 8) & 255;
-      d[o + 2] = n & 255;
-      d[o + 3] = 255;
-    }
-  }
-  ctx.putImageData(image, 0, 0);
-}
-
-/* ── contour rings, dotted ───────────────────────────────────────────── */
-
-export function drawContourRings(ctx: Ctx, field: ChartField, steps = 9): void {
-  const { width: W, height: H } = field;
-  ctx.fillStyle = "rgba(53,224,232,0.26)";
-  ctx.beginPath();
-
-  for (let py = 1; py < H; py++) {
-    for (let px = 1; px < W; px++) {
-      const i = py * W + px;
-      if (field.wet[i]) continue;
-      const here = Math.floor((field.z[i]! / field.ceiling) * steps);
-      const left = Math.floor((field.z[i - 1]! / field.ceiling) * steps);
-      const up = Math.floor((field.z[i - W]! / field.ceiling) * steps);
-      if (here === left && here === up) continue;
-      // Dot on a lattice fixed in the plane, so independent crossings land on
-      // the same rhythm and read as one ruled line.
-      if ((px * 2 + py * 3) % 5 !== 0) continue;
-      ctx.rect(px, py, 1, 1);
-    }
-  }
-  ctx.fill();
-}
-
-export function drawShoreline(ctx: Ctx, field: ChartField): void {
-  const { width: W, height: H } = field;
-  const edge: number[] = [];
-  for (let py = 1; py < H - 1; py++) {
-    for (let px = 1; px < W - 1; px++) {
-      const i = py * W + px;
-      if (!field.wet[i]) continue;
-      if (
-        !field.wet[i - 1] ||
-        !field.wet[i + 1] ||
-        !field.wet[i - W] ||
-        !field.wet[i + W]
-      ) {
-        edge.push(i);
-      }
-    }
-  }
-  // Sea level is liquidation: the only edge on the chart that marks an event.
-  for (const [color, spread] of [["rgba(226,96,58,0.26)", 1], ["#ff8a5a", 0]] as const) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    for (const i of edge) {
-      const px = i % W;
-      const py = (i / W) | 0;
-      ctx.rect(px - spread, py - spread, 1 + spread * 2, 1 + spread * 2);
-    }
-    ctx.fill();
-  }
-}
-
 /* ── the furniture ───────────────────────────────────────────────────── */
 
 function hash(x: number, y: number, salt: number): number {
   let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(salt, 2246822519);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-function blit(ctx: Ctx, sprite: Sprite, x: number, y: number): void {
-  const { art, palette } = sprite;
-  for (let row = 0; row < art.length; row++) {
-    const line = art[row]!;
-    for (let col = 0; col < line.length; col++) {
-      const key = line[col]!;
-      if (key === ".") continue;
-      const color = palette[key];
-      if (!color) continue;
-      ctx.fillStyle = color;
-      ctx.fillRect(x + col, y + row, 1, 1);
-    }
-  }
 }
 
 export interface Placed {
@@ -277,71 +164,33 @@ export function placeFurniture(field: ChartField, keepOut: Placed[]): Placed[] {
 export function placeForest(field: ChartField): Placed[] {
   const { width: W, height: H } = field;
   const trees: Placed[] = [];
-  const step = 7;
+  // The forest is drawn as 16px sprites on a 4-pixel tile grid, so the lattice
+  // is one tile: at most one tree per tile, and only one tile in five. Denser
+  // than that and the canopy hides the ground the trees are supposed to be on.
+  const step = 4;
 
-  for (let gy = 2; gy < H - 8; gy += step) {
-    for (let gx = 2; gx < W - 14; gx += step) {
-      if (hash(gx, gy, 21) > 0.72) continue;
-      const x = gx + Math.floor(hash(gx, gy, 22) * (step - 1));
-      const y = gy + Math.floor(hash(gx, gy, 23) * (step - 1));
+  for (let gy = 4; gy < H - 4; gy += step) {
+    for (let gx = 4; gx < W - 4; gx += step) {
+      if (hash(gx, gy, 21) > 0.22) continue;
+      const x = gx + 2;
+      const y = gy + 2;
       const i = y * W + x;
-      if (i < 0 || i >= field.z.length || field.wet[i]) continue;
-
+      if (field.wet[i]) continue;
       const t = field.z[i]! / field.ceiling;
-      const pick = hash(x, y, 24);
-
       // Above the treeline nothing grows, and the bare tops are the point.
-      if (t > 0.86) continue;
-
+      if (t > 0.9) continue;
+      const pick = hash(x, y, 24);
       let sprite: Sprite;
       if (t > 0.6) sprite = pick > 0.5 ? CONIFER_TALL : CONIFER_MID;
       else if (t > 0.3) sprite = pick > 0.68 ? CONIFER_CLUMP : pick > 0.3 ? CONIFER_TALL : CONIFER_MID;
       else sprite = pick > 0.55 ? CONIFER_MID : CONIFER_LOW;
-
       const w = sprite.art[0]?.length ?? 0;
       const h = sprite.art.length;
-      trees.push({
-        sprite,
-        x: Math.min(W - w - 1, Math.max(1, x - (w >> 1))),
-        y: Math.min(H - h - 1, Math.max(1, y - h)),
-      });
+      trees.push({ sprite, x: x - (w >> 1), y: y - h });
     }
   }
   return trees.sort((a, b) => a.y - b.y);
 }
-
-/** A few things on the wing, high over the water and the tops. */
-export function placeWinged(field: ChartField): Placed[] {
-  const { width: W, height: H } = field;
-  const out: Placed[] = [];
-  for (let gy = 6; gy < H - 10; gy += 34) {
-    for (let gx = 8; gx < W - 10; gx += 41) {
-      if (hash(gx, gy, 31) > 0.42) continue;
-      const x = gx + Math.floor(hash(gx, gy, 32) * 20);
-      const y = gy + Math.floor(hash(gx, gy, 33) * 14);
-      if (x >= W - 6 || y >= H - 4) continue;
-      out.push({ sprite: WINGED, x, y });
-    }
-  }
-  return out;
-}
-
-/** The seat of a territory, sized by how much of the chart it holds. */
-export function citadelFor(share: number): Sprite {
-  if (share > 0.34) return ZIGGURAT;
-  if (share > 0.15) return TEMPLE;
-  return TOWER;
-}
-
-export function drawFurniture(ctx: Ctx, items: readonly Placed[]): void {
-  for (const item of items) {
-    ctx.fillStyle = "rgba(6,14,28,0.45)";
-    ctx.fillRect(item.x, item.y + item.sprite.art.length - 1, item.sprite.art[0]?.length ?? 0, 1);
-    blit(ctx, item.sprite, item.x, item.y);
-  }
-}
-
-export { blit, WARD_CIRCLE };
 
 /* ── the ley network ─────────────────────────────────────────────────── */
 
@@ -415,37 +264,11 @@ export function leyNetwork(field: ChartField, seats: Node[], pass: Node | null):
   return lines;
 }
 
-export function drawLeyNetwork(ctx: Ctx, lines: readonly Node[][], pulse: number): void {
-  const swell = 0.55 + 0.45 * pulse;
-
-  // Bloom first, then the core, so the line reads as light rather than as ink.
-  for (const [color, spread] of [
-    [`rgba(53,224,232,${0.1 * swell})`, 2],
-    [`rgba(53,224,232,${0.28 * swell})`, 1],
-  ] as const) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    for (const line of lines) {
-      for (const p of line) ctx.rect(p.x - spread, p.y - spread, 1 + spread * 2, 1 + spread * 2);
-    }
-    ctx.fill();
-  }
-
-  ctx.fillStyle = `rgba(168,246,255,${0.62 + 0.38 * swell})`;
-  ctx.beginPath();
-  for (const line of lines) {
-    for (const p of line) ctx.rect(p.x, p.y, 1, 1);
-  }
-  ctx.fill();
+/** The seat of a territory, sized by how much of the chart it holds. */
+export function citadelFor(share: number): Sprite {
+  if (share > 0.34) return ZIGGURAT;
+  if (share > 0.15) return TEMPLE;
+  return TOWER;
 }
 
-/** A beacon burning on a citadel's apex. */
-export function drawBeacon(ctx: Ctx, x: number, y: number, pulse: number): void {
-  const r = 1 + pulse;
-  ctx.fillStyle = `rgba(168,246,255,${0.18 + 0.16 * pulse})`;
-  ctx.beginPath();
-  ctx.arc(x, y, 4.5 + r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#e6feff";
-  ctx.fillRect(x - 1, y - 1, 2, 2);
-}
+export { WARD_CIRCLE };

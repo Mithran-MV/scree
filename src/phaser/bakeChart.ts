@@ -1,25 +1,19 @@
 import type { Raster } from "../field/raster";
 import { extractFeatures } from "../field/features";
 import { findLandmarks } from "../world/landmarks";
+import { contour } from "../render/contours";
 import {
   CONIFER_CLUMP,
-  CONIFER_LOW,
   CONIFER_MID,
   CONIFER_TALL,
   HILL,
 } from "../arcane/terrain-sprites";
 import {
-  blit,
   chartSizeFor,
   citadelFor,
-  drawContourRings,
-  drawFurniture,
-  drawShoreline,
   leyNetwork,
-  paintGround,
   placeForest,
   placeFurniture,
-  placeWinged,
   sampleField,
   WARD_CIRCLE,
   type Node,
@@ -27,10 +21,12 @@ import {
 } from "../arcane/pixelchart";
 
 export interface BakedChart {
-  /** The country, drawn once at chart resolution. */
-  canvas: HTMLCanvasElement;
   width: number;
   height: number;
+  /** Health-factor headroom the top of the land represents. */
+  ceiling: number;
+  /** The liquidation line: the zero contour, as segments in chart pixels. */
+  shore: { x1: number; y1: number; x2: number; y2: number }[];
   /** Routes between the seats, in chart pixels. */
   leyLines: Node[][];
   /** Where each citadel's beacon burns. */
@@ -51,26 +47,16 @@ export interface BakedChart {
 /**
  * Bake the chart once.
  *
- * Everything that never moves — ground, contours, shoreline, mountains,
- * holdings, citadels — is drawn into a single canvas that Phaser uploads as one
- * texture. Only the light on top of it is animated, so a repaint costs a texture
- * swap rather than several thousand fills a frame.
+ * Nothing is painted here any more. The bake samples the field onto the chart
+ * grid and works out where everything stands — seats, forest, hills, the ley
+ * routes, the liquidation line — and the world draws it all from the packs.
+ * Every position still comes out of the measured field.
  */
 export function bakeChart(raster: Raster, aspect: number): BakedChart {
   const size = chartSizeFor(aspect);
   const field = sampleField(raster, size);
   const features = extractFeatures(raster);
   const landmarks = findLandmarks(raster);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = size.width;
-  canvas.height = size.height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.imageSmoothingEnabled = false;
-
-  paintGround(ctx, field);
-  drawContourRings(ctx, field);
-  drawShoreline(ctx, field);
 
   const win = raster.window;
   const toChart = (col: number, row: number): Node => ({
@@ -106,9 +92,6 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
   if (wardAt) keepOut.push({ sprite: WARD_CIRCLE, x: wardAt.x, y: wardAt.y });
 
   // Canopy first, then the landmarks that stand out of it, then the seats.
-  // The massifs are baked: the packs carry no true mountain tile, and the
-  // ranked peaks read as a range where a rock tile reads as a block. The
-  // forest and the hills are handed to the world to stand real sprites on.
   const foot = (item: Placed) => ({
     x: item.x + ((item.sprite.art[0]?.length ?? 0) >> 1),
     y: item.y + item.sprite.art.length,
@@ -121,33 +104,23 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
       : "low",
     ...foot(item),
   }));
-  const furniture = placeFurniture(field, keepOut);
   const relief: BakedChart["relief"] = [];
-  const baked: Placed[] = [];
   let hills = 0;
-  for (const item of furniture) {
-    // Every sixth hill gets a boulder sprite; the rest stay baked. Standing a
-    // rock on every hill turned the mid-band into a wall of grey.
+  for (const item of placeFurniture(field, keepOut)) {
+    // Every sixth hill is marked; the rest are carried by the ground's bands.
     if (item.sprite === HILL && hills++ % 6 === 0) relief.push({ kind: "hill", ...foot(item) });
-    else baked.push(item);
   }
-  drawFurniture(ctx, baked);
-  // The seats themselves are not baked: the world draws each as its own sprite
-  // at nearly twice the ground scale, so they stand over the map rather than in it.
-  if (wardAt) blit(ctx, WARD_CIRCLE, wardAt.x, wardAt.y);
-  drawFurniture(ctx, placeWinged(field));
+  void wardAt;
 
-  // The binding: this chart is read as a spread, so it has a spine.
-  const spine = Math.round(size.width / 2);
-  ctx.fillStyle = "rgba(6,18,24,0.5)";
-  ctx.fillRect(spine - 3, 0, 6, size.height);
-  ctx.fillStyle = "rgba(120,190,200,0.16)";
-  ctx.fillRect(spine, 0, 1, size.height);
-  for (let y = 0; y < size.height; y += 9) {
-    ctx.fillStyle = "rgba(6,18,24,0.55)";
-    ctx.fillRect(spine - 5, y, 2, 5);
-    ctx.fillRect(spine + 4, y + 4, 2, 5);
-  }
+  // The liquidation line, from the same tracer the survey plate uses.
+  const sx = (size.width - 1) / (win.width - 1);
+  const sy = (size.height - 1) / (win.height - 1);
+  const shore = contour(raster, 0).segments.map((seg) => ({
+    x1: seg.x1 * sx,
+    y1: (win.height - 1 - seg.y1) * sy,
+    x2: seg.x2 * sx,
+    y2: (win.height - 1 - seg.y2) * sy,
+  }));
 
   const beacons = seatSprites.map((seat) => ({
     x: seat.x + ((seat.sprite.art[0]?.length ?? 0) >> 1),
@@ -160,9 +133,10 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
   }));
 
   return {
-    canvas,
     width: size.width,
     height: size.height,
+    ceiling: field.ceiling,
+    shore,
     leyLines: leyNetwork(field, nodes, pass),
     beacons,
     seats: landmarks.map((mark, i) => ({

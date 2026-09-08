@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Sprite } from "../arcane/figures";
 import type { BakedChart } from "./bakeChart";
 import { SCOUT, SCOUT_LOST } from "./figures";
+import { SEATS, buildGround, seatKindFor, treeFrame } from "./ground";
 import { T } from "./theme";
 import { hex } from "./chrome";
 
@@ -25,7 +26,6 @@ export interface WorldData {
 
 const SCALE = 4;
 const KEYS = {
-  terrain: "w-terrain",
   mote: "w-mote",
   scout: "w-scout",
   lost: "w-lost",
@@ -43,27 +43,6 @@ const FRAME = {
   beast: 110, // the red crawler: guardian of the high shore
 } as const;
 
-/** Kenney's CC0 Map Pack, 64px overworld tiles, one image each. */
-const MAP = {
-  castle: "kenney-map-castle",
-  tower: "kenney-map-tower",
-  pyramid: "kenney-map-pyramid",
-  boulder: "kenney-map-boulder",
-  pineTall: "kenney-map-pine-tall",
-  pineDark: "kenney-map-pine-dark",
-  pineSnow: "kenney-map-pine-snow",
-  broadleaf: "kenney-map-broadleaf",
-} as const;
-const MAP_FILES: Record<keyof typeof MAP, string> = {
-  castle: "mapTile_100.png",
-  tower: "mapTile_099.png",
-  pyramid: "mapTile_050.png",
-  boulder: "mapTile_056.png",
-  pineTall: "mapTile_041.png",
-  pineDark: "mapTile_060.png",
-  pineSnow: "mapTile_110.png",
-  broadleaf: "mapTile_055.png",
-};
 
 /** How much larger than the ground the figures stand. */
 const MAGE_SCALE = SCALE * 1.15;
@@ -104,22 +83,31 @@ export class WorldScene extends Phaser.Scene {
       frameWidth: 16,
       frameHeight: 16,
     });
-    for (const [name, file] of Object.entries(MAP_FILES) as [keyof typeof MAP, string][]) {
-      this.load.image(MAP[name], `/assets/kenney/map-pack/${file}`);
-    }
   }
 
   create() {
     const { chart } = this.opts;
     this.bakeTextures();
 
-    const worldW = chart.width * SCALE;
-    const worldH = chart.height * SCALE;
+    /* ── the ground, tiled from Tiny Town ─────────────────────────── */
+    const ground = buildGround(this, chart, SHEET.town, SCALE);
+    const worldW = ground.cols * 16 * SCALE;
+    const worldH = ground.rows * 16 * SCALE;
 
-    this.add.image(0, 0, KEYS.terrain).setOrigin(0, 0).setScale(SCALE).setDepth(0);
+    // The liquidation line: the one edge on the map that marks an event.
+    const shoreLine = this.add.graphics().setDepth(0.5);
+    shoreLine.lineStyle(SCALE * 0.6, T.perilBright, 0.9);
+    shoreLine.beginPath();
+    for (const seg of chart.shore) {
+      shoreLine.moveTo(seg.x1 * SCALE, seg.y1 * SCALE);
+      shoreLine.lineTo(seg.x2 * SCALE, seg.y2 * SCALE);
+    }
+    shoreLine.strokePath();
+    shoreLine.enableFilters();
+    shoreLine.filters?.internal.addGlow(T.peril, 5, 0, 1);
 
     /* ── the ley network and its light ────────────────────────────── */
-    const ley = this.add.graphics().setDepth(2);
+    const ley = this.add.graphics().setDepth(2.5);
     ley.lineStyle(SCALE * 0.7, T.leyBright, 0.95);
     for (const line of chart.leyLines) {
       if (line.length < 2) continue;
@@ -148,39 +136,42 @@ export class WorldScene extends Phaser.Scene {
         .setDepth(3);
     }
 
-    // The forest, one sprite per tree, depth-sorted so nearer trees overlap
-    // farther ones. Species follow the altitude bands the bake chose.
+    // The forest, one sprite per tree from the same sheet as the ground, so
+    // a tree and the tile it stands on share a pixel. Depth follows the foot.
     for (const t of chart.forest) {
-      const key = t.kind === "tall" ? MAP.pineTall : t.kind === "mid" ? MAP.pineDark : t.kind === "clump" ? MAP.pineSnow : MAP.broadleaf;
-      const scale = t.kind === "tall" ? 0.5 : t.kind === "clump" ? 0.55 : 0.42;
       this.add
-        .image(t.x * SCALE, t.y * SCALE, key)
-        .setOrigin(0.5, 0.94)
-        .setScale(scale)
-        .setDepth(1 + t.y / chart.height);
-    }
-    // Boulders on the hills.
-    for (const r of chart.relief) {
-      this.add
-        .image(r.x * SCALE, r.y * SCALE, MAP.boulder)
-        .setOrigin(0.5, 0.92)
-        .setScale(0.45)
-        .setDepth(1 + r.y / chart.height);
+        .image(t.x * SCALE, t.y * SCALE, SHEET.town, treeFrame(t.kind, t.x, t.y))
+        .setOrigin(0.5, 0.95)
+        .setScale(SCALE)
+        .setDepth(1 + (t.y / chart.height) * 0.9);
     }
 
-    // The seats, standing over the map: castle, pyramid or tower by share.
+    // The seats, composed from the pack's castle and house pieces by share.
     for (const seat of chart.seats) {
-      const key = seat.share > 0.34 ? MAP.castle : seat.share > 0.15 ? MAP.pyramid : MAP.tower;
-      const img = this.add
-        .image(seat.at.x * SCALE, seat.at.y * SCALE + SCALE * 2, key)
-        .setOrigin(0.5, 0.95)
-        .setScale(seat.share > 0.34 ? 2.6 : 2.1)
-        .setDepth(6);
-      img.enableFilters();
-      img.filters?.internal.addGlow(T.ley, 3, 0, 1);
-      // A footing shadow, so it stands on the ground rather than floating.
+      const kind = seatKindFor(seat.share);
+      const rows = SEATS[kind];
+      const cellPx = 16 * SCALE;
+      const wCells = rows[0]!.length;
+      const hCells = rows.length;
+      const left = seat.at.x * SCALE - (wCells * cellPx) / 2;
+      const top = seat.at.y * SCALE + SCALE * 2 - hCells * cellPx;
+      const parts: Phaser.GameObjects.Image[] = [];
+      rows.forEach((row, ry) => {
+        row.forEach((frame, rx) => {
+          if (frame < 0) return;
+          parts.push(
+            this.add
+              .image(left + rx * cellPx, top + ry * cellPx, SHEET.town, frame)
+              .setOrigin(0, 0)
+              .setScale(SCALE),
+          );
+        });
+      });
+      const keep = this.add.container(0, 0, parts).setDepth(6);
+      keep.enableFilters();
+      keep.filters?.internal.addGlow(T.ley, 3, 0, 1);
       this.add
-        .ellipse(img.x, img.y + SCALE, img.displayWidth * 0.9, SCALE * 3, 0x000000, 0.4)
+        .ellipse(seat.at.x * SCALE, seat.at.y * SCALE + SCALE * 3, wCells * cellPx * 0.9, SCALE * 3, 0x000000, 0.4)
         .setDepth(5);
     }
 
@@ -467,12 +458,6 @@ export class WorldScene extends Phaser.Scene {
   /* ── textures ────────────────────────────────────────────────────── */
 
   private bakeTextures() {
-    if (!this.textures.exists(KEYS.terrain)) {
-      this.textures.addCanvas(KEYS.terrain, this.opts.chart.canvas);
-    } else {
-      this.textures.remove(KEYS.terrain);
-      this.textures.addCanvas(KEYS.terrain, this.opts.chart.canvas);
-    }
     this.bakeSprite(KEYS.scout, SCOUT);
     this.bakeSprite(KEYS.lost, SCOUT_LOST);
 
