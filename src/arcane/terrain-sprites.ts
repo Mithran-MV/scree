@@ -9,13 +9,13 @@ import type { Palette, Sprite } from "./figures";
  */
 
 const LAND: Palette = {
-  l: "#8fa8c8", // lit face
-  m: "#4e6f9a", // mid face
-  d: "#26405f", // shadowed face
-  k: "#132840", // base shadow
-  s: "#c9dcf0", // snow / highlight
-  g: "#c9a052", // gilt edge
-  G: "#ffe9a8", // gilt lit
+  l: "#7fb4bd", // lit face
+  m: "#3f7684", // mid face
+  d: "#1d4553", // shadowed face
+  k: "#0c2530", // base shadow
+  s: "#cfeef2", // ridge highlight
+  g: "#2f8f9c", // installation plating
+  G: "#8ef0f7", // lit panel
 };
 
 /** A ranked massif: three summits, the way an old map draws a range. */
@@ -126,9 +126,9 @@ export const HOLDING: Sprite = {
 };
 
 const DROWNED: Palette = {
-  d: "#2b4d68",
-  s: "#3f6d8c",
-  k: "#16324a",
+  d: "#1d4a58",
+  s: "#2c6675",
+  k: "#0e2c38",
 };
 
 /** Ruins, drawn only on ground that is already underwater. */

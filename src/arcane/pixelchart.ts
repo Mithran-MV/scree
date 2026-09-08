@@ -31,8 +31,8 @@ export function chartSizeFor(aspect: number): ChartSize {
 
 /* ── the ground ──────────────────────────────────────────────────────── */
 
-const SEA = ["#0b1c34", "#10263f", "#16304c", "#1c3a58"];
-const LAND = ["#1f3f60", "#27506f", "#2f5f7e", "#38708d", "#43829c", "#4f94ab"];
+const SEA = ["#061620", "#08202c", "#0b2a38", "#0e3646"];
+const LAND = ["#123141", "#17414f", "#1c525f", "#22646f", "#297880", "#328d92"];
 
 const BAYER = [
   [0, 8, 2, 10],
@@ -120,7 +120,7 @@ export function paintGround(ctx: Ctx, field: ChartField): void {
 
 export function drawContourRings(ctx: Ctx, field: ChartField, steps = 9): void {
   const { width: W, height: H } = field;
-  ctx.fillStyle = "rgba(224,178,90,0.34)";
+  ctx.fillStyle = "rgba(53,224,232,0.26)";
   ctx.beginPath();
 
   for (let py = 1; py < H; py++) {
@@ -158,7 +158,7 @@ export function drawShoreline(ctx: Ctx, field: ChartField): void {
     }
   }
   // Sea level is liquidation: the only edge on the chart that marks an event.
-  for (const [color, spread] of [["rgba(226,96,58,0.28)", 1], ["#ff9a6a", 0]] as const) {
+  for (const [color, spread] of [["rgba(226,96,58,0.26)", 1], ["#ff8a5a", 0]] as const) {
     ctx.fillStyle = color;
     ctx.beginPath();
     for (const i of edge) {
@@ -355,8 +355,8 @@ export function drawLeyNetwork(ctx: Ctx, lines: readonly Node[][], pulse: number
 
   // Bloom first, then the core, so the line reads as light rather than as ink.
   for (const [color, spread] of [
-    [`rgba(224,178,90,${0.1 * swell})`, 2],
-    [`rgba(224,178,90,${0.26 * swell})`, 1],
+    [`rgba(53,224,232,${0.1 * swell})`, 2],
+    [`rgba(53,224,232,${0.28 * swell})`, 1],
   ] as const) {
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -366,7 +366,7 @@ export function drawLeyNetwork(ctx: Ctx, lines: readonly Node[][], pulse: number
     ctx.fill();
   }
 
-  ctx.fillStyle = `rgba(255,233,168,${0.62 + 0.38 * swell})`;
+  ctx.fillStyle = `rgba(168,246,255,${0.62 + 0.38 * swell})`;
   ctx.beginPath();
   for (const line of lines) {
     for (const p of line) ctx.rect(p.x, p.y, 1, 1);
@@ -377,10 +377,10 @@ export function drawLeyNetwork(ctx: Ctx, lines: readonly Node[][], pulse: number
 /** A beacon burning on a citadel's apex. */
 export function drawBeacon(ctx: Ctx, x: number, y: number, pulse: number): void {
   const r = 1 + pulse;
-  ctx.fillStyle = `rgba(255,233,168,${0.18 + 0.16 * pulse})`;
+  ctx.fillStyle = `rgba(168,246,255,${0.18 + 0.16 * pulse})`;
   ctx.beginPath();
   ctx.arc(x, y, 4.5 + r, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#fff6dd";
+  ctx.fillStyle = "#e6feff";
   ctx.fillRect(x - 1, y - 1, 2, 2);
 }

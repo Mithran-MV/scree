@@ -217,3 +217,73 @@ export const SCROLL: Sprite = {
     "................",
   ],
 };
+
+const GAUNTLET: Palette = {
+  p: "#8a6f3c",
+  P: "#c9a866",
+  L: "#e7c98a",
+  d: "#4e3d1e",
+  k: "#241c0c",
+  c: "#57d6e8",
+  C: "#d9f7ff",
+  r: "#e2603a",
+  g: "#2f7a4a",
+  b: "#3f6e94",
+  s: "#3a2f18",
+};
+
+/**
+ * The Risk-Engineer's gauntlet, reaching in from the east.
+ *
+ * It is the hand that would execute what the chart decides — and it is drawn
+ * open and empty on purpose, because nothing on this build has been armed yet.
+ */
+export const GAUNTLET_ARM: Sprite = {
+  palette: GAUNTLET,
+  art: [
+    "..........PPLL....",
+    ".........PppppP...",
+    "........PppddppP..",
+    ".......PppdkkdppP.",
+    "....PPPppdkcckdpp.",
+    "...PpppppdkcCckdp.",
+    "..PppddppdkccKkdp.",
+    ".PppdkkdppdkkkkdpP",
+    ".PpdkccckddppppddP",
+    ".PpdkcCckdPLLLLPp.",
+    ".PpdkccckdPrgbcPp.",
+    ".PpddkkddpPLLLLPp.",
+    ".PppddddppPppppPp.",
+    "..PppppppppPPPPp..",
+    "...PpddddppppppP..",
+    "....PPppppppPPP...",
+    "......ssPPss......",
+    ".....sPPPPPPs.....",
+    "....sPpdddddPs....",
+    "....sPpdppppds....",
+    "....sPpdpLLpds....",
+    "....sPpddddddds...",
+    "....sPPPPPPPPPs...",
+    ".....kkkkkkkkk....",
+  ],
+};
+
+/** A quill standing in its well, larger than the desk trinket. */
+export const QUILL_TALL: Sprite = {
+  palette: { w: "#f2ede0", W: "#cfc6b4", k: "#241c0c", i: "#1b2b4a", d: "#4e3d1e", g: "#c9a866" },
+  art: [
+    "........ww",
+    ".......wWw",
+    "......wWw.",
+    ".....wWw..",
+    "....wWw...",
+    "...wWw....",
+    "..wWw.....",
+    ".kWw......",
+    ".kk.......",
+    "gggg......",
+    "iiii......",
+    "iiii......",
+    "dddd......",
+  ],
+};
