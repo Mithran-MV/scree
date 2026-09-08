@@ -83,7 +83,7 @@ export class ChamberScene extends Phaser.Scene {
       x: gutterL,
       y: 58,
       w: Math.max(120, W - gutterL - feedW - 54),
-      h: Math.max(120, H - deckH - 96),
+      h: Math.max(120, H - deckH - 124),
     };
 
     this.drawScreen();
@@ -269,7 +269,7 @@ export class ChamberScene extends Phaser.Scene {
     hit.on("pointerout", () => this.opts.onLeave?.());
     this.layer.add(hit);
 
-    this.layer.add(runeStrip(this, x, y + h - 16, w).setDepth(9));
+    this.layer.add(runeStrip(this, x, y + h - 15, w).setDepth(9));
   }
 
   private chartToScreen(cx: number, cy: number): { x: number; y: number } {
@@ -338,19 +338,21 @@ export class ChamberScene extends Phaser.Scene {
     }
     this.layer.add(g);
 
-    const priceAxis = label(this, 26, y + h / 2, "COLLATERAL PRICE", {
+    // Price runs west to east, so its name belongs under the ticks; dwell runs
+    // south to north, so its name is the only one that turns on its side.
+    const dwellAxis = label(this, 30, y + h / 2, "DWELL — HOW LONG IT HELD", {
       size: 10,
       color: T.ley,
       tracking: 2,
     });
-    priceAxis.setOrigin(0.5, 0.5).setAngle(-90);
-    const dwellAxis = label(this, 46, y + h / 2, "DWELL — HOW LONG IT HELD", {
-      size: 9.5,
-      color: T.inkDim,
-      tracking: 1.6,
-    });
     dwellAxis.setOrigin(0.5, 0.5).setAngle(-90);
-    this.layer.add([priceAxis, dwellAxis]);
+    const priceAxis = label(this, x + w / 2, y + h + 26, "COLLATERAL PRICE", {
+      size: 10,
+      color: T.ley,
+      tracking: 2,
+      align: "center",
+    });
+    this.layer.add([dwellAxis, priceAxis]);
   }
 
   /* ── overlays on the screen ───────────────────────────────────────── */
@@ -522,14 +524,12 @@ export class ChamberScene extends Phaser.Scene {
     }
     this.layer.add(keys);
 
+    const controlY = top + deckH * 0.5 - 13;
     this.layer.add(
-      button(this, 22, top + deckH * 0.32, "Reference book", { onClick: this.opts.onReference }),
+      button(this, 22, controlY, "Reference book", { onClick: this.opts.onReference }),
     );
     this.layer.add(
-      button(this, 22, top + deckH * 0.32 + 34, "Survey plate", {
-        tone: T.brass,
-        onClick: this.opts.onPlate,
-      }),
+      button(this, 150, controlY, "Survey plate", { tone: T.brass, onClick: this.opts.onPlate }),
     );
 
     // A coolant canister on the right of the deck.
@@ -545,10 +545,10 @@ export class ChamberScene extends Phaser.Scene {
     this.layer.add(can);
 
     this.layer.add(
-      label(this, W / 2, H - 20, "SCREE READS PUBLIC POSITIONS ONLY · NO SIGNATURE · NO APPROVAL", {
+      label(this, W / 2, H - 15, "PUBLIC POSITIONS ONLY · NO SIGNATURE · NO APPROVAL", {
         size: 9,
         color: T.inkDim,
-        alpha: 0.65,
+        alpha: 0.6,
         tracking: 1.4,
         align: "center",
       }),
