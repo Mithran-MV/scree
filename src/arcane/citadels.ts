@@ -19,7 +19,7 @@ export function drawCitadel(
   pulse: number,
 ): void {
   // Between a watchpost and a fortress, by how much ground it holds.
-  const scale = 0.7 + Math.min(1, share * 2.4);
+  const scale = 1.05 + Math.min(1.15, share * 2.6);
   const w = 30 * scale;
   const h = 34 * scale;
   const tiers = 4;

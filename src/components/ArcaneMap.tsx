@@ -158,10 +158,13 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
   const place = (at: [number, number], nudge: number) => {
     let left = at[0] / box.w;
     let top = at[1] / box.h;
-    if (top < 0.3 && left > 0.5) top = 0.3 + nudge;
+    // The ledger owns the eastern column and the rail the northern strip; a
+    // plaque that would land under either is walked clear rather than hidden.
+    if (left > 0.68) left = 0.68;
+    if (top < 0.34) top = 0.34 + nudge;
     return {
       left: `${left * 100}%`,
-      top: `${Math.min(0.86, Math.max(0.14, top)) * 100}%`,
+      top: `${Math.min(0.84, Math.max(0.2, top)) * 100}%`,
     };
   };
 

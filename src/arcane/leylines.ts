@@ -63,9 +63,9 @@ export function drawContours(
       strokeSegments(ctx, line.segments, project, css(ARCANE.hazardGlow, 0.5), 6, 18);
       strokeSegments(ctx, line.segments, project, css(ARCANE.hazard, 0.95), 1.7, 8);
     } else if (index) {
-      strokeSegments(ctx, line.segments, project, css(ARCANE.ley, 0.42), 1.5, 6);
+      strokeSegments(ctx, line.segments, project, css(ARCANE.ley, 0.72), 1.6, 9);
     } else {
-      strokeSegments(ctx, line.segments, project, css(ARCANE.leyPale, 0.4), 0.7, 0);
+      strokeSegments(ctx, line.segments, project, css(ARCANE.ley, 0.34), 0.9, 3);
     }
   }
 }

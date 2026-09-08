@@ -38,8 +38,8 @@ export function paintGround(r: Raster, width: number, height: number): ImageData
       // A slow vignette, so the eye is pulled to the middle of the sheet.
       const dx = px / width - 0.5;
       const dy = py / height - 0.5;
-      const fall = 1 - Math.min(1, (dx * dx + dy * dy) * 1.35);
-      c = mix(ARCANE.abyss, c, 0.55 + 0.45 * fall);
+      const fall = 1 - Math.min(1, (dx * dx + dy * dy) * 0.9);
+      c = mix(ARCANE.abyss, c, 0.72 + 0.28 * fall);
 
       const o = (py * width + px) * 4;
       data[o] = c.r;

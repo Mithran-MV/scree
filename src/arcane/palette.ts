@@ -23,11 +23,11 @@ export const css = (c: RGB, alpha = 1): string =>
 
 export const ARCANE = {
   /** Ground, low to high. */
-  abyss: rgb("#050a18"),
-  deep: rgb("#0a1330"),
-  shelf: rgb("#132348"),
-  upland: rgb("#1d3260"),
-  summit: rgb("#2b4a7d"),
+  abyss: rgb("#03060f"),
+  deep: rgb("#081026"),
+  shelf: rgb("#12294f"),
+  upland: rgb("#24406f"),
+  summit: rgb("#3d6394"),
 
   /** Ley light. */
   ley: rgb("#e0b25a"),
