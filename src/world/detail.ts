@@ -1,5 +1,15 @@
 import type { WorldPaint } from "./pixels";
-import { JETTY, MENHIR, blit } from "./sprites";
+import {
+  BOAT,
+  BOAT_PALETTE,
+  FIELD,
+  FIELD_PALETTE,
+  JETTY,
+  MENHIR,
+  RUIN,
+  RUIN_PALETTE,
+  blit,
+} from "./sprites";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -99,3 +109,137 @@ export function drawBanner(ctx: Ctx, x: number, y: number, color: string): void 
 }
 
 export const BANNER_COLOURS = ["#b4472c", "#3f6e94", "#c2a34a", "#6a8f56"];
+
+/**
+ * Streams, traced down the true fall line.
+ *
+ * Water runs downhill, and downhill here is the same gradient the whole map is
+ * built on. So a stream is not decoration: each one is a path a falling price
+ * would actually take across this surface, drawn from the high ground until it
+ * reaches the sea. On a wallet with a ridge they fork away on both sides, which
+ * is the same fact the terrain is trying to tell you, said in water.
+ */
+export function drawStreams(ctx: Ctx, paint: WorldPaint, seedCount = 14): void {
+  const { width: W, height: H, elevation, wet } = paint;
+  const at = (x: number, y: number) => y * W + x;
+
+  const seeds: { x: number; y: number; z: number }[] = [];
+  for (let y = 4; y < H - 4; y += 7) {
+    for (let x = 4; x < W - 4; x += 7) {
+      if (wet[at(x, y)]) continue;
+      seeds.push({ x, y, z: elevation[at(x, y)]! });
+    }
+  }
+  seeds.sort((a, b) => b.z - a.z);
+
+  const drawn = new Set<number>();
+  let cut = 0;
+
+  for (const seed of seeds) {
+    if (cut >= seedCount) break;
+    if (drawn.has(at(seed.x, seed.y))) continue;
+
+    const path: { x: number; y: number }[] = [];
+    let x = seed.x;
+    let y = seed.y;
+
+    for (let step = 0; step < W; step++) {
+      path.push({ x, y });
+      if (wet[at(x, y)]) break;
+
+      // Steepest descent over the eight neighbours.
+      let bestX = x;
+      let bestY = y;
+      let bestZ = elevation[at(x, y)]!;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 1 || nx >= W - 1 || ny < 1 || ny >= H - 1) continue;
+          const nz = elevation[at(nx, ny)]!;
+          if (nz < bestZ) {
+            bestZ = nz;
+            bestX = nx;
+            bestY = ny;
+          }
+        }
+      }
+      // A pit with no lower neighbour ends the stream rather than looping.
+      if (bestX === x && bestY === y) break;
+      x = bestX;
+      y = bestY;
+    }
+
+    // A trickle that dies after three cells is noise, not a watercourse.
+    if (path.length < 8) continue;
+    cut++;
+    for (const p of path) {
+      drawn.add(at(p.x, p.y));
+      ctx.fillStyle = "#5e8f96";
+      ctx.fillRect(p.x, p.y, 1, 1);
+      ctx.fillStyle = "rgba(46,72,78,0.5)";
+      ctx.fillRect(p.x, p.y + 1, 1, 1);
+    }
+  }
+}
+
+/**
+ * Ruins in the shallows and hulls on the strand.
+ *
+ * The drowned ground is where a wallet is liquidated, so the shallows are the
+ * places somebody already lost. Standing a few broken walls there says what the
+ * map is for without a word of copy.
+ */
+export function drawWreckage(ctx: Ctx, paint: WorldPaint): void {
+  const { width: W, height: H, elevation, wet } = paint;
+  const hash = (x: number, y: number, salt: number) => {
+    let h = Math.imul(x, 668265263) ^ Math.imul(y, 374761393) ^ Math.imul(salt, 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+
+  for (let y = 5; y < H - 6; y += 9) {
+    for (let x = 5; x < W - 7; x += 9) {
+      const i = y * W + x;
+      const roll = hash(x, y, 11);
+
+      if (wet[i]) {
+        // Only the shallows: deep water hides everything anyway.
+        const depth = -elevation[i]!;
+        if (depth > 0.16 || roll > 0.22) continue;
+        blit(ctx, RUIN, RUIN_PALETTE, x, y);
+      } else if (roll > 0.94 && nearShore(paint, x, y)) {
+        blit(ctx, BOAT, BOAT_PALETTE, x, y);
+      }
+    }
+  }
+}
+
+function nearShore(paint: WorldPaint, x: number, y: number): boolean {
+  const { width: W, height: H, wet } = paint;
+  for (let dy = -3; dy <= 3; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      if (wet[ny * W + nx]) return true;
+    }
+  }
+  return false;
+}
+
+/** Tilled ground laid beside a settlement, on gentle dry cells only. */
+export function drawFields(ctx: Ctx, paint: WorldPaint, x: number, y: number): void {
+  const { width: W, height: H, wet } = paint;
+  for (const [dx, dy] of [
+    [-9, 2],
+    [8, 3],
+  ] as const) {
+    const fx = x + dx;
+    const fy = y + dy;
+    if (fx < 1 || fx + 6 >= W || fy < 1 || fy + 4 >= H) continue;
+    if (wet[fy * W + fx] || wet[(fy + 3) * W + fx + 5]) continue;
+    blit(ctx, FIELD, FIELD_PALETTE, fx, fy);
+  }
+}

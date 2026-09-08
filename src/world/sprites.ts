@@ -40,55 +40,68 @@ const STONE: Palette = {
   r: "#8c3f2a",
   t: "#6a2f1f",
   g: "#c8b26a",
+  i: "#6f6455",
+  c: "#8f8574",
 };
 
-/** A square keep with battlements. */
+/** A walled keep with a gatehouse and a courtyard. */
 export const KEEP = [
-  "..hh....hh..",
-  "..ll....ll..",
-  ".hhhhhhhhhh.",
-  ".lssssssssl.",
-  ".lswwsswwsl.",
-  ".lssssssssl.",
-  ".lsswwssssl.",
-  ".lssssssssl.",
-  ".lsswwsswsl.",
-  ".dssssssssd.",
-  ".dsswwwssdd.",
-  "..dddddddd..",
+  "...hh......hh...",
+  "...ll......ll...",
+  ".hhhhhhhhhhhhhh.",
+  ".llssssssssssll.",
+  ".lswwssssswwssl.",
+  ".lsssssssssssslic",
+  ".lsswwsssswwssl.",
+  ".lssssssssssssl.",
+  ".lswwssgggsswsl.",
+  ".dsssssgggssssd.",
+  ".dsssssgggssssd.",
+  "..dddddgggdddd..",
+  "..ss.......ss...",
+  ".sddssssssssdds.",
+  ".sssssssssssssss",
+  "..d..d..d..d..d.",
 ];
 
-/** A longhouse with a steep roof. */
+/** A longhouse with a steep roof, a byre and a stack. */
 export const HALL = [
-  ".....rr.....",
-  "....rrrr....",
-  "...rrrrrr...",
-  "..rrrrrrrr..",
-  ".rrrrrrrrrr.",
-  "tttttttttttt",
-  ".lssssssssl.",
-  ".lswwsswwsl.",
-  ".lssssssssl.",
-  ".lsswwsssdl.",
-  ".dssssssssd.",
-  "..dddddddd..",
+  "......rr........",
+  ".....rrrr.......",
+  "....rrrrrr......",
+  "...rrrrrrrr.....",
+  "..rrrrrrrrrr..w.",
+  ".rrrrrrrrrrrr.w.",
+  "tttttttttttttt..",
+  ".lssssssssssl...",
+  ".lswwsssswwsl...",
+  ".lssssssssssl.gg",
+  ".lsswwssssssl.gg",
+  ".dsgggssssssd...",
+  ".dsgggsssssdd...",
+  "..dddddddddd....",
+  "..sss....sss....",
+  "...d......d.....",
 ];
 
-/** A slim watchtower. */
+/** A slim watchtower on a rocky footing. */
 export const SPIRE = [
-  "....hh....",
-  "...hllh...",
-  "..hlsslh..",
-  "..lssssl..",
-  "..lswwsl..",
-  "..lssssl..",
-  "..lssssl..",
-  "..lswwsl..",
-  "..lssssl..",
-  "..lssssl..",
-  "..dssssd..",
-  "..dswwsd..",
-  "...dddd...",
+  ".....hh.....",
+  "....hllh....",
+  "...hlsslh...",
+  "...lssssl...",
+  "...lswwsl...",
+  "...lssssl...",
+  "...lssssl...",
+  "...lswwsl...",
+  "...lssssl...",
+  "...lssssl...",
+  "...lswwsl...",
+  "...dssssd...",
+  "..ddssssdd..",
+  ".sddggggdds.",
+  ".sssggggsss.",
+  "..d..dd..d..",
 ];
 
 export const HOLDFASTS = [KEEP, HALL, SPIRE];
@@ -184,3 +197,29 @@ export const JETTY = ["bb", "bb", "bb", "bb", "bb"];
 
 /** Standing stones, planted only where the map has a genuine saddle. */
 export const MENHIR = [".s.", "srs", "srs", "srs", "sss"];
+
+/* ── more of the forest, so it does not tile ─────────────────────────── */
+
+export const PINE_TALL = ["..t..", "..t..", ".ttt.", ".mmm.", "mmmmm", "..b.."];
+export const PINE_YOUNG = ["..t..", ".mmm.", "..b.."];
+export const BIRCH = [".ll..", "llll.", ".lml.", "..s..", "..s.."];
+
+/** Tilled ground, only ever laid beside a settlement. */
+export const FIELD = ["yyyyyy", "ymymym", "yyyyyy", "ymymym"];
+
+const FARM: Palette = { y: "#a88f52", m: "#8a7440" };
+export const FIELD_PALETTE = FARM;
+
+/**
+ * A ruin, drawn only in the shallows.
+ *
+ * These stand where the ground is underwater now: the drowned basins are where
+ * a wallet is liquidated, so the shallows are exactly the places somebody
+ * already lost. Marking them costs nothing and says the thing the map is for.
+ */
+export const RUIN = [".d.d.", "dsds.", ".d.ds", "ds..d"];
+export const RUIN_PALETTE: Palette = { d: "#5d6d70", s: "#78888a" };
+
+/** A hull drawn up on the strand. */
+export const BOAT = [".bbbb.", "bwwwwb", ".bbbb."];
+export const BOAT_PALETTE: Palette = { b: "#5a4429", w: "#8b6f45" };
