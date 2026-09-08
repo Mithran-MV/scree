@@ -151,10 +151,10 @@ export function plaque(
 }
 
 export interface ButtonOptions {
-  tone?: number;
-  width?: number;
-  onClick?: () => void;
-  enabled?: boolean;
+  tone?: number | undefined;
+  width?: number | undefined;
+  onClick?: (() => void) | undefined;
+  enabled?: boolean | undefined;
 }
 
 export function button(
