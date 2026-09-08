@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { TerrainMap, type Readout } from "@/components/TerrainMap";
+import { WorldView } from "@/components/WorldView";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import { bracket } from "@/core/bracket";
 import { exposure, walletShape } from "@/core/kernel";
@@ -24,6 +25,14 @@ const DEMO: Loaded = {
   offAxisCollateralUSD: 0.153 * 110_000,
 };
 
+/** The world's name follows the shape of the book standing on it. */
+function placeName(shape: WalletShape): string {
+  if (shape === "MIXED") return "The Saddle Lands";
+  if (shape === "LONG-ONLY") return "The Long Fall";
+  if (shape === "SHORT-ONLY") return "The Rising Tide";
+  return "Unsurveyed";
+}
+
 export default function Page() {
   const [loaded, setLoaded] = useState<Loaded>(DEMO);
   const [address, setAddress] = useState("");
@@ -31,6 +40,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [features, setFeatures] = useState<Features | null>(null);
   const [hover, setHover] = useState<Readout | null>(null);
+  const [view, setView] = useState<"world" | "survey">("world");
 
   const shape = useMemo(() => walletShape(loaded.baskets), [loaded.baskets]);
   const br = useMemo(() => bracket(loaded.baskets, 0), [loaded.baskets]);
@@ -87,6 +97,9 @@ export default function Page() {
         <button className="ghost" onClick={() => { setLoaded(DEMO); setError(null); }}>
           reference book
         </button>
+        <button className="ghost" onClick={() => setView(view === "world" ? "survey" : "world")}>
+          {view === "world" ? "survey plate" : "world"}
+        </button>
       </div>
 
       {error && (
@@ -96,12 +109,84 @@ export default function Page() {
       )}
 
       <div className="layout">
-        <TerrainMap
-          baskets={loaded.baskets}
-          spot={SPOT_ETH_USD}
-          onFeatures={onFeatures}
-          onHover={onHover}
-        />
+        {view === "world" ? (
+          <WorldView
+            baskets={loaded.baskets}
+            spot={SPOT_ETH_USD}
+            onFeatures={onFeatures}
+            onHover={onHover}
+          >
+            <div className="hud hud-place">
+              <div className="eyebrow">the ground you borrow on</div>
+              <h2>{placeName(shape)}</h2>
+              <p>
+                High ground is safe and the shoreline is liquidation. West and east is the
+                price of your collateral; north is how long it has stayed there.
+              </p>
+            </div>
+
+            <div className="hud hud-actions">
+              <button className="hud-btn" onClick={() => setView("survey")}>
+                Survey plate
+              </button>
+              <button className="hud-btn primary" disabled title="not built yet">
+                Connect wallet
+              </button>
+            </div>
+
+            <div className="hud hud-feed">
+              <h3>live feed</h3>
+              <ul>
+                <li>
+                  <b>ETH</b>
+                  <span>{usd(SPOT_ETH_USD)}</span>
+                </li>
+                <li className="alarm">
+                  <b>crash liquidation</b>
+                  <span>{usd(br.lower)}</span>
+                </li>
+                <li className="alarm">
+                  <b>pump liquidation</b>
+                  <span>{usd(br.upper)}</span>
+                </li>
+                <li>
+                  <b>holdfasts</b>
+                  <span>{features?.binders.length ?? "—"}</span>
+                </li>
+                <li>
+                  <b>drowned basins</b>
+                  <span>{features?.basins ?? "—"}</span>
+                </li>
+                <li>
+                  <b>passes</b>
+                  <span>{features?.boundaryPass ? 1 : 0}</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="hud hud-legend">
+              {hover ? (
+                <>
+                  <span>
+                    {usd(hover.price)} · held {days(hover.dwellDays)}
+                  </span>
+                  <span>
+                    health {(hover.z + 1).toFixed(3)} · {hover.binder ?? "nothing binds"}
+                  </span>
+                </>
+              ) : (
+                <span>move over the ground to read it</span>
+              )}
+            </div>
+          </WorldView>
+        ) : (
+          <TerrainMap
+            baskets={loaded.baskets}
+            spot={SPOT_ETH_USD}
+            onFeatures={onFeatures}
+            onHover={onHover}
+          />
+        )}
 
         <div>
           <section className="panel">
