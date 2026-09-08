@@ -1,12 +1,26 @@
 :root {
-  --ink: #0d1117;
-  --paper: #f4f2ec;
-  --rule: #cfcabb;
-  --muted: #6b6659;
-  --water: #1c3a62;
-  --land: #7aa574;
-  --accent: #b6522a;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Iron gall on a warm sheet. A cool blue-black is the clearest tell of a
+     machine-made map, so the ink is a warm brown-black throughout. */
+  --ink: #1f1a12;
+  --paper: #e6dfcc;
+  --plate: #efe9dc;
+  --knockout: #f7f3ea;
+  --rule: #c6bca2;
+  --muted: #6f6857;
+  --accent: #a0411f;
+  --shore: #14100a;
+  --ground-low: #e2d9c4;
+  --ground-mid: #e9e2d2;
+  --ground-high: #f4f0e6;
+  --sea-shallow: #dfd8c8;
+  --sea-deep: #c9c0ab;
+  --stain: #8c683a;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "URW Palladio L",
+    "Book Antiqua", Georgia, serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "DejaVu Sans Mono", monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -64,7 +78,7 @@ a { color: var(--accent); }
 
 .plate {
   border: 1px solid var(--rule);
-  background: #fffdf8;
+  background: var(--plate);
   position: relative;
 }
 
@@ -90,7 +104,7 @@ a { color: var(--accent); }
 
 .panel {
   border: 1px solid var(--rule);
-  background: #fffdf8;
+  background: var(--plate);
   padding: 14px 16px;
 }
 
@@ -137,7 +151,7 @@ a { color: var(--accent); }
   font-size: 13px;
   padding: 7px 10px;
   border: 1px solid var(--rule);
-  background: #fffdf8;
+  background: var(--plate);
   color: var(--ink);
 }
 
