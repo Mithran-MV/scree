@@ -14,7 +14,8 @@
     "verify:subgraphs": "tsx scripts/verify-subgraphs.ts",
     "dev": "next dev",
     "build": "NEXT_DIST_DIR=.next-build next build",
-    "start": "NEXT_DIST_DIR=.next-build next start"
+    "start": "NEXT_DIST_DIR=.next-build next start",
+    "bake:sprites": "tsx scripts/bake-sprites.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
