@@ -355,7 +355,9 @@ a { color: var(--accent); }
 
 .hud-legend {
   bottom: 14px;
-  left: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
   font-family: var(--mono);
   font-size: 10px;
   color: #f4efe4;

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import type { Basket } from "@/core/types";
-import { rasterize, renderWindow, colOfPrice, priceAt, dwellAt, sample } from "@/field/raster";
+import { rasterize, fittedWindow, colOfPrice, priceAt, dwellAt, sample } from "@/field/raster";
+import { bracket } from "@/core/bracket";
 import { extractFeatures } from "@/field/features";
 import { WORLD_H, WORLD_W, paintWorld } from "@/world/pixels";
 import { SCATTER_ART, scatterWorld } from "@/world/scatter";
@@ -46,7 +47,12 @@ function toWorld(col: number, row: number, fw: number, fh: number): { x: number;
 export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, children }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const win = useMemo(() => renderWindow(spot), [spot]);
+  // Framed to the book rather than to a fixed range, so a tight wallet reads as
+  // country instead of as open sea. The chosen range is printed on the axis.
+  const win = useMemo(() => {
+    const br = bracket(baskets, 0);
+    return fittedWindow(spot, br.lower, br.upper);
+  }, [baskets, spot]);
   const raster = useMemo(() => rasterize(baskets, win), [baskets, win]);
   const features = useMemo(() => extractFeatures(raster), [raster]);
   const paint = useMemo(() => paintWorld(raster), [raster]);
@@ -165,16 +171,34 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
     onHover?.({ price, dwellDays, z: s.z, binder: s.binder });
   }
 
+  // The hud owns the top strip and the right column. A label that would land
+  // under it is pushed down rather than drawn through it.
+  const HUD_TOP = 0.34;
+  const HUD_RIGHT = 0.62;
+
   const holdLabels = landmarks.map((mark, i) => {
     const p = toWorld(mark.col, mark.row, win.width, win.height);
+    let fx = p.x / WORLD_W;
+    let fy = p.y / WORLD_H;
+    if (fy < HUD_TOP && fx > HUD_RIGHT) fy = HUD_TOP + 0.06 * (i + 1);
     return {
       id: mark.deploymentId,
       share: mark.share,
-      left: `${(p.x / WORLD_W) * 100}%`,
-      top: `${(p.y / WORLD_H) * 100}%`,
+      left: `${fx * 100}%`,
+      top: `${Math.min(0.92, fy) * 100}%`,
       order: i,
     };
   });
+
+  const passSpot = features.pass
+    ? toWorld(features.pass.column, features.pass.row, win.width, win.height)
+    : null;
+  const passTop =
+    passSpot && passSpot.y / WORLD_H < HUD_TOP && passSpot.x / WORLD_W > HUD_RIGHT
+      ? HUD_TOP + 0.24
+      : passSpot
+        ? passSpot.y / WORLD_H
+        : 0;
 
   return (
     <div className="world">
@@ -190,12 +214,12 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
           <em>{(label.share * 100).toFixed(0)}% of the ground</em>
         </span>
       ))}
-      {features.pass && features.boundaryPass ? (
+      {features.pass && features.boundaryPass && passSpot ? (
         <span
           className="pass-name"
           style={{
-            left: `${(toWorld(features.pass.column, features.pass.row, win.width, win.height).x / WORLD_W) * 100}%`,
-            top: `${(toWorld(features.pass.column, features.pass.row, win.width, win.height).y / WORLD_H) * 100}%`,
+            left: `${(passSpot.x / WORLD_W) * 100}%`,
+            top: `${Math.min(0.9, passTop) * 100}%`,
           }}
         >
           THE PASS

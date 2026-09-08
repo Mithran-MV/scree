@@ -45,6 +45,40 @@ export function renderWindow(spot: number): Window {
   return windowAt(spot);
 }
 
+/**
+ * A window framed around the ground a particular book actually occupies.
+ *
+ * The survey plate and the geometry gate are both measured on the fixed
+ * `renderWindow`, so their numbers stay comparable between wallets. The world
+ * view is a picture rather than a measurement, and a picture of a tight book
+ * inside a fixed +/-60% frame is four fifths open sea. This frames the shot
+ * instead: the interval between the two liquidation prices is given a little
+ * over half the width, and the range it chose is printed on the axis so the
+ * framing is never a hidden decision.
+ */
+export function fittedWindow(
+  spot: number,
+  lower: number | null,
+  upper: number | null,
+  overrides: Partial<Window> = {},
+): Window {
+  const low = lower ?? spot * 0.72;
+  const high = upper ?? spot * 1.38;
+  if (!(low > 0) || !(high > low)) return windowAt(spot, overrides);
+
+  // Widen the bracket so it takes a bit over half the frame, leaving real
+  // water on both sides rather than cropping to the coastline.
+  const centre = Math.sqrt(low * high);
+  const halfSpan = Math.log(high / low) / 2;
+  const padded = halfSpan / 0.55;
+
+  return windowAt(spot, {
+    priceLow: (centre * Math.exp(-padded)) / spot - 1,
+    priceHigh: (centre * Math.exp(padded)) / spot - 1,
+    ...overrides,
+  });
+}
+
 /** Column index to price. Log-spaced across the fractional bounds. */
 export function priceAt(w: Window, col: number): number {
   const lo = Math.log(w.spot * (1 + w.priceLow));

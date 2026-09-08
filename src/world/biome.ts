@@ -25,13 +25,13 @@ const c = (r: number, g: number, b: number): RGB => ({ r, g, b });
 /** Sea level upward, normalised against the ceiling. */
 export const LAND_BANDS: Band[] = [
   { at: 0.0, color: c(214, 199, 154) }, // wet sand at the waterline
-  { at: 0.06, color: c(197, 190, 132) }, // dune grass
-  { at: 0.16, color: c(140, 168, 96) }, // meadow
-  { at: 0.4, color: c(86, 130, 74) }, // pasture
-  { at: 0.62, color: c(58, 98, 62) }, // forest
-  { at: 0.82, color: c(120, 116, 100) }, // scree
-  { at: 0.94, color: c(168, 164, 152) }, // bare rock
-  { at: 1.0, color: c(238, 240, 242) }, // snow
+  { at: 0.05, color: c(197, 190, 132) }, // dune grass
+  { at: 0.14, color: c(140, 168, 96) }, // meadow
+  { at: 0.46, color: c(96, 140, 78) }, // pasture
+  { at: 0.72, color: c(62, 104, 64) }, // forest
+  { at: 0.88, color: c(88, 104, 74) }, // upland heath
+  { at: 0.96, color: c(126, 122, 106) }, // scree
+  { at: 1.0, color: c(176, 172, 160) }, // bare rock at the very top
 ];
 
 /** Sea level downward, normalised against the sea datum. */
@@ -86,7 +86,7 @@ export function biomeColor(input: BiomeInput): [number, number, number] {
     base = rampAt(LAND_BANDS, Math.min(1, z / Math.max(ceiling, 1e-6)));
     // Soil holds on gentle ground and sheds on steep ground. The exponent keeps
     // rolling country green and only turns the genuinely steep faces to stone.
-    const bare = Math.min(1, Math.max(0, (steepness - 0.42) / 0.4)) ** 1.4;
+    const bare = Math.min(1, Math.max(0, (steepness - 0.66) / 0.3)) ** 1.4;
     if (bare > 0) {
       const stone = steepness > 0.82 ? CLIFF : ROCK;
       base = {

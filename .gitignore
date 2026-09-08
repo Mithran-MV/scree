@@ -23,3 +23,6 @@ next-env.d.ts
 # Editor tooling
 .vscode/
 .idea/
+
+# Production build output, so a `next build` cannot clobber a running dev server
+/.next-build

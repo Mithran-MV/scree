@@ -26,11 +26,14 @@ describe("biomeColor", () => {
     }
   });
 
-  it("goes green in the middle altitudes and white at the top", () => {
+  it("goes green in the middle altitudes and bare stone at the top", () => {
     const [, meadowG] = biomeColor({ z: 0.05, ...flat });
-    const [snowR, snowG, snowB] = biomeColor({ z: 0.2, ...flat });
+    const [rockR, rockG, rockB] = biomeColor({ z: 0.2, ...flat });
     expect(meadowG).toBeGreaterThan(0.4);
-    expect(Math.min(snowR, snowG, snowB)).toBeGreaterThan(0.85);
+    // The summit is stone, not snow: near-neutral, and lighter than the
+    // pasture under it rather than white.
+    expect(Math.max(rockR, rockG, rockB) - Math.min(rockR, rockG, rockB)).toBeLessThan(0.09);
+    expect(rockR + rockG + rockB).toBeGreaterThan(meadowG * 3);
   });
 
   it("darkens with depth below the waterline", () => {
