@@ -6,9 +6,9 @@ import { TerrainMap } from "@/components/TerrainMap";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import type { Basket } from "@/core/types";
 
-// Phaser touches window at import time, so the console mounts on the client only.
-const PhaserChamber = dynamic(
-  () => import("@/components/PhaserChamber").then((m) => m.PhaserChamber),
+// Phaser touches window at import time, so the world mounts on the client only.
+const Expedition = dynamic(
+  () => import("@/components/Expedition").then((m) => m.Expedition),
   { ssr: false },
 );
 
@@ -63,7 +63,7 @@ export default function Page() {
 
   return (
     <main className="stage">
-      <PhaserChamber
+      <Expedition
         baskets={loaded.baskets}
         label={loaded.label}
         spot={SPOT_ETH_USD}

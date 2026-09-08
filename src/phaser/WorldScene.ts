@@ -1,0 +1,424 @@
+import Phaser from "phaser";
+import type { Sprite } from "../arcane/figures";
+import type { BakedChart } from "./bakeChart";
+import { DRAKE_ROOST, MAGE_WALK, SCOUT, SCOUT_LOST, SERPENT_COILS } from "./figures";
+import { T } from "./theme";
+import { hex } from "./chrome";
+
+export interface ScoutPath {
+  /** Chart coordinates per step. */
+  points: { x: number; y: number }[];
+  diedAt: number | null;
+}
+
+export interface WorldData {
+  chart: BakedChart;
+  crashBinder: string | null;
+  pumpBinder: string | null;
+  /** Where the mage starts, in chart pixels. */
+  start: { x: number; y: number };
+  onArrive?: (x: number, y: number, drowned: boolean) => void;
+  onNearSeat?: (id: string | null) => void;
+  onGuardian?: (which: "serpent" | "drake", binder: string | null) => void;
+  onScouts?: (survived: number, total: number) => void;
+}
+
+const SCALE = 4;
+const KEYS = {
+  terrain: "w-terrain",
+  mote: "w-mote",
+  mage0: "w-mage-0",
+  mage1: "w-mage-1",
+  scout: "w-scout",
+  lost: "w-lost",
+  serpent: "w-serpent",
+  drake: "w-drake",
+} as const;
+
+/**
+ * The world, with someone in it.
+ *
+ * Everything static was baked into one texture. What lives here is what moves:
+ * the mage who walks the map, the guardians who stir when he comes near the
+ * water, and the scouts he sends out — two hundred of them at once, walking the
+ * price paths the simulation drew, so a survival rate is something you watch
+ * happen rather than a number you are handed.
+ */
+export class WorldScene extends Phaser.Scene {
+  private opts!: WorldData;
+  private mage!: Phaser.GameObjects.Sprite;
+  private target: { x: number; y: number } | null = null;
+  private lastSeat: string | null = null;
+  private guardians: { kind: "serpent" | "drake"; sprite: Phaser.GameObjects.Image; at: { x: number; y: number }; stirred: boolean }[] = [];
+  private scoutsRunning = false;
+
+  constructor() {
+    super({ key: "world" });
+  }
+
+  init(data: WorldData) {
+    this.opts = data;
+  }
+
+  create() {
+    const { chart } = this.opts;
+    this.bakeTextures();
+
+    const worldW = chart.width * SCALE;
+    const worldH = chart.height * SCALE;
+
+    this.add.image(0, 0, KEYS.terrain).setOrigin(0, 0).setScale(SCALE).setDepth(0);
+
+    /* ── the ley network and its light ────────────────────────────── */
+    const ley = this.add.graphics().setDepth(2);
+    ley.lineStyle(SCALE * 0.7, T.leyBright, 0.95);
+    for (const line of chart.leyLines) {
+      if (line.length < 2) continue;
+      ley.beginPath();
+      ley.moveTo(line[0]!.x * SCALE, line[0]!.y * SCALE);
+      for (const p of line) ley.lineTo(p.x * SCALE, p.y * SCALE);
+      ley.strokePath();
+    }
+    ley.enableFilters();
+    ley.filters?.internal.addGlow(T.ley, 6, 0, 1);
+
+    for (const line of chart.leyLines) {
+      if (line.length < 10) continue;
+      const path = new Phaser.Curves.Path(line[0]!.x * SCALE, line[0]!.y * SCALE);
+      for (let i = 1; i < line.length; i += 3) path.lineTo(line[i]!.x * SCALE, line[i]!.y * SCALE);
+      this.add
+        .particles(0, 0, KEYS.mote, {
+          lifespan: 4400,
+          quantity: 1,
+          frequency: 1100,
+          scale: { start: 1.3, end: 0 },
+          alpha: { start: 0.9, end: 0 },
+          blendMode: "ADD",
+          emitZone: { type: "edge", source: path, quantity: 48, total: 1 },
+        })
+        .setDepth(3);
+    }
+
+    for (const b of chart.beacons) {
+      const arc = this.add.circle(b.x * SCALE, b.y * SCALE, SCALE, T.leyBright, 0.9).setDepth(4);
+      this.tweens.add({
+        targets: arc,
+        scale: { from: 0.6, to: 2.1 },
+        alpha: { from: 0.85, to: 0.1 },
+        duration: 2000,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.InOut",
+      });
+    }
+
+    /* ── the guardians ─────────────────────────────────────────────── */
+    this.placeGuardians();
+
+    /* ── the mage ──────────────────────────────────────────────────── */
+    this.anims.create({
+      key: "mage-walk",
+      frames: [{ key: KEYS.mage0 }, { key: KEYS.mage1 }],
+      frameRate: 6,
+      repeat: -1,
+    });
+    this.mage = this.add
+      .sprite(this.opts.start.x * SCALE, this.opts.start.y * SCALE, KEYS.mage0)
+      .setOrigin(0.5, 1)
+      .setScale(SCALE * 0.9)
+      .setDepth(10);
+
+    const halo = this.add.circle(0, 0, SCALE * 3, T.ley, 0).setStrokeStyle(1.5, T.ley, 0.7).setDepth(9);
+    this.tweens.add({
+      targets: halo,
+      scale: { from: 0.7, to: 2.2 },
+      alpha: { from: 0.8, to: 0 },
+      duration: 2000,
+      repeat: -1,
+      ease: "Quad.Out",
+    });
+    this.events.on("update", () => halo.setPosition(this.mage.x, this.mage.y - SCALE));
+
+    /* ── input ─────────────────────────────────────────────────────── */
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.rightButtonDown()) return;
+      const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      this.walkTo(world.x / SCALE, world.y / SCALE);
+    });
+
+    this.input.on("wheel", (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+      const cam = this.cameras.main;
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.12), 0.55, 3));
+    });
+
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, worldW, worldH);
+    cam.startFollow(this.mage, true, 0.08, 0.08);
+    cam.fadeIn(500);
+  }
+
+  /* ── walking ─────────────────────────────────────────────────────── */
+
+  /** Ask the mage to walk to a chart coordinate. */
+  walkTo(cx: number, cy: number) {
+    const { chart } = this.opts;
+    this.target = {
+      x: Phaser.Math.Clamp(cx, 2, chart.width - 3),
+      y: Phaser.Math.Clamp(cy, 4, chart.height - 2),
+    };
+    this.mage.play("mage-walk", true);
+  }
+
+  override update(_time: number, delta: number) {
+    if (this.target) {
+      const tx = this.target.x * SCALE;
+      const ty = this.target.y * SCALE;
+      const dx = tx - this.mage.x;
+      const dy = ty - this.mage.y;
+      const dist = Math.hypot(dx, dy);
+      const speed = 0.11 * delta * SCALE;
+
+      if (dist <= speed) {
+        this.mage.setPosition(tx, ty);
+        this.mage.stop();
+        this.mage.setTexture(KEYS.mage0);
+        const at = this.target;
+        this.target = null;
+        this.arrive(at.x, at.y);
+      } else {
+        this.mage.x += (dx / dist) * speed;
+        this.mage.y += (dy / dist) * speed;
+        this.mage.setFlipX(dx < 0);
+      }
+    }
+    this.watchSeats();
+    this.watchGuardians();
+  }
+
+  private arrive(cx: number, cy: number) {
+    const { chart } = this.opts;
+    const i = Math.round(cy) * chart.width + Math.round(cx);
+    const drowned = chart.wet[i] === 1;
+    if (drowned) {
+      this.cameras.main.flash(260, 226, 96, 58);
+      this.cameras.main.shake(180, 0.004);
+      this.tweens.add({ targets: this.mage, alpha: { from: 1, to: 0.35 }, yoyo: true, duration: 220, repeat: 2 });
+    }
+    this.opts.onArrive?.(cx, cy, drowned);
+  }
+
+  private watchSeats() {
+    const { chart } = this.opts;
+    const mx = this.mage.x / SCALE;
+    const my = this.mage.y / SCALE;
+    let near: string | null = null;
+    for (const seat of chart.seats) {
+      if (Math.hypot(seat.at.x - mx, seat.at.y - my) < 14) {
+        near = seat.id;
+        break;
+      }
+    }
+    if (near !== this.lastSeat) {
+      this.lastSeat = near;
+      this.opts.onNearSeat?.(near);
+    }
+  }
+
+  /* ── guardians ───────────────────────────────────────────────────── */
+
+  /**
+   * One guardian per way to die.
+   *
+   * The serpent lies in the western basin, where a crash drowns you; the drake
+   * roosts on the eastern shore, where a pump does. Each is tied to the
+   * deployment that actually binds on that side, and neither is drawn when its
+   * side cannot kill you — a book with only one way to die gets one guardian.
+   */
+  private placeGuardians() {
+    const { chart } = this.opts;
+    const { width: W, height: H, wet } = chart;
+    const row = Math.floor(H * 0.55);
+
+    const seek = (from: number, step: number): number | null => {
+      for (let x = from; x >= 0 && x < W; x += step) {
+        if (wet[row * W + x]) return x;
+      }
+      return null;
+    };
+
+    if (this.opts.crashBinder) {
+      const shore = seek(Math.floor(W / 2), -1);
+      if (shore !== null) {
+        const x = Math.max(12, shore - 14);
+        this.spawnGuardian("serpent", KEYS.serpent, x, row);
+      }
+    }
+    if (this.opts.pumpBinder) {
+      const shore = seek(Math.floor(W / 2), 1);
+      if (shore !== null) {
+        const x = Math.min(W - 12, shore + 10);
+        this.spawnGuardian("drake", KEYS.drake, x, row - 6);
+      }
+    }
+  }
+
+  private spawnGuardian(kind: "serpent" | "drake", key: string, cx: number, cy: number) {
+    const sprite = this.add
+      .image(cx * SCALE, cy * SCALE, key)
+      .setOrigin(0.5, 1)
+      .setScale(SCALE * 0.95)
+      .setAlpha(0.55)
+      .setDepth(5);
+    this.tweens.add({
+      targets: sprite,
+      y: sprite.y - SCALE * 1.5,
+      duration: 2600 + (kind === "drake" ? 700 : 0),
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.InOut",
+    });
+    this.guardians.push({ kind, sprite, at: { x: cx, y: cy }, stirred: false });
+  }
+
+  private watchGuardians() {
+    const mx = this.mage.x / SCALE;
+    const my = this.mage.y / SCALE;
+    for (const g of this.guardians) {
+      const d = Math.hypot(g.at.x - mx, g.at.y - my);
+      const near = d < 34;
+      if (near && !g.stirred) {
+        g.stirred = true;
+        g.sprite.setAlpha(1);
+        this.tweens.add({ targets: g.sprite, scaleX: SCALE * 1.15, scaleY: SCALE * 1.15, duration: 380, yoyo: true });
+        this.cameras.main.shake(140, 0.0025);
+        this.opts.onGuardian?.(g.kind, g.kind === "serpent" ? this.opts.crashBinder : this.opts.pumpBinder);
+      } else if (!near && g.stirred) {
+        g.stirred = false;
+        g.sprite.setAlpha(0.55);
+      }
+    }
+  }
+
+  /* ── scouts ──────────────────────────────────────────────────────── */
+
+  /**
+   * Send the scouts.
+   *
+   * Every path is one of the simulation's price walks, already computed and
+   * already judged. Here they are only walked: each scout follows its own
+   * track, and where the simulation says the book drowned, that scout stops
+   * and a mark is left on the ground. When the last one is home, the count of
+   * the returned is reported — which is the survival rate, watched.
+   */
+  sendScouts(paths: ScoutPath[]) {
+    if (this.scoutsRunning || paths.length === 0) return;
+    this.scoutsRunning = true;
+
+    const duration = 4200;
+    let finished = 0;
+    let survived = 0;
+    const originX = this.mage.x;
+    const originY = this.mage.y - SCALE * 2;
+
+    for (const path of paths) {
+      const scout = this.add
+        .image(originX, originY, KEYS.scout)
+        .setScale(SCALE * 0.8)
+        .setDepth(8)
+        .setAlpha(0.9);
+
+      const steps = path.diedAt === null ? path.points.length - 1 : path.diedAt;
+      const walked = path.points.slice(0, Math.max(1, steps) + 1);
+      const perStep = duration / Math.max(1, path.points.length - 1);
+
+      const chain = walked.slice(1).map((p) => ({
+        x: p.x * SCALE,
+        y: p.y * SCALE,
+        duration: perStep,
+        ease: "Linear",
+      }));
+
+      const done = () => {
+        finished++;
+        if (path.diedAt === null) {
+          survived++;
+          this.tweens.add({
+            targets: scout,
+            alpha: 0,
+            duration: 400,
+            onComplete: () => scout.destroy(),
+          });
+        } else {
+          scout.setTexture(KEYS.lost).setAlpha(1);
+          this.tweens.add({ targets: scout, alpha: 0.35, duration: 6000, delay: 1200 });
+        }
+        if (finished === paths.length) {
+          this.scoutsRunning = false;
+          this.opts.onScouts?.(survived, paths.length);
+        }
+      };
+
+      if (chain.length === 0) {
+        done();
+        continue;
+      }
+      this.tweens.chain({ targets: scout, tweens: chain, onComplete: done });
+    }
+  }
+
+  /* ── textures ────────────────────────────────────────────────────── */
+
+  private bakeTextures() {
+    if (!this.textures.exists(KEYS.terrain)) {
+      this.textures.addCanvas(KEYS.terrain, this.opts.chart.canvas);
+    } else {
+      this.textures.remove(KEYS.terrain);
+      this.textures.addCanvas(KEYS.terrain, this.opts.chart.canvas);
+    }
+    this.bakeSprite(KEYS.mage0, MAGE_WALK[0]!);
+    this.bakeSprite(KEYS.mage1, MAGE_WALK[1]!);
+    this.bakeSprite(KEYS.scout, SCOUT);
+    this.bakeSprite(KEYS.lost, SCOUT_LOST);
+    this.bakeSprite(KEYS.serpent, SERPENT_COILS);
+    this.bakeSprite(KEYS.drake, DRAKE_ROOST);
+
+    if (!this.textures.exists(KEYS.mote)) {
+      const size = 8;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d")!;
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, hex(T.leyBright));
+      grad.addColorStop(0.4, "rgba(53,224,232,0.7)");
+      grad.addColorStop(1, "rgba(53,224,232,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      this.textures.addCanvas(KEYS.mote, canvas);
+    }
+  }
+
+  private bakeSprite(key: string, sprite: Sprite) {
+    if (this.textures.exists(key)) return;
+    const w = sprite.art[0]?.length ?? 0;
+    const h = sprite.art.length;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d")!;
+    for (let row = 0; row < h; row++) {
+      const line = sprite.art[row]!;
+      for (let col = 0; col < line.length; col++) {
+        const ch = line[col]!;
+        if (ch === ".") continue;
+        const colour = sprite.palette[ch];
+        if (!colour) continue;
+        ctx.fillStyle = colour;
+        ctx.fillRect(col, row, 1, 1);
+      }
+    }
+    this.textures.addCanvas(key, canvas);
+  }
+}
+
+export { SCALE as WORLD_SCALE };

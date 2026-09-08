@@ -31,6 +31,10 @@ export interface BakedChart {
   /** Seat plaque anchors, in chart pixels. */
   seats: { id: string; share: number; at: Node }[];
   pass: Node | null;
+  /** True where a chart pixel is underwater, so the world knows where you drown. */
+  wet: Uint8Array;
+  /** Elevation per chart pixel. */
+  z: Float32Array;
 }
 
 /**
@@ -131,5 +135,7 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
       at: nodes[i] ?? toChart(mark.col, mark.row),
     })),
     pass,
+    wet: field.wet,
+    z: field.z,
   };
 }
