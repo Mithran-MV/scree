@@ -230,7 +230,7 @@ html, body {
 .address-slot {
   position: absolute;
   right: 90px;
-  top: 26px;
+  top: 64px;
   width: 190px;
   height: 22px;
   z-index: 3;

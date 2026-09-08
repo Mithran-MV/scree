@@ -1,19 +1,22 @@
 import type { Exposure } from "../core/types";
 
-/**
- * Events the world raises for the interface. The UI never reaches into the
- * world's display list; it listens, and it calls the world's public methods.
- */
+/** Events the world raises for the interface. The world never draws UI; the interface never reads terrain. */
 export const EV = {
   /** Pointer moved over the ground: the reading at that cell. */
   zoneHover: "zone-hover",
-  /** Pointer entered or left a citadel. */
+  /** Pointer entered or left a holdfast. */
   citadelHover: "citadel-hover",
+  /** Pointer entered or left a sea monster. */
+  monsterHover: "monster-hover",
+  /** A sea monster was clicked. */
+  monsterClick: "monster-click",
   /** Pointer left the map. */
   hoverEnd: "hover-end",
   /** The surveyor arrived somewhere. */
   arrive: "arrive",
-  /** A guardian stirred. */
+  /** The surveyor walked up to a holdfast. */
+  welcome: "welcome",
+  /** A leviathan stirred near the surveyor. */
   guardian: "guardian",
   /** The scouts came home. */
   scouts: "scouts",
@@ -41,12 +44,33 @@ export interface CitadelHover {
   entered: boolean;
 }
 
+export interface MonsterEvent {
+  key: string;
+  name: string;
+  warning: string;
+  entered: boolean;
+  /** Screen position of the pointer, for the pop-up. */
+  x: number;
+  y: number;
+  /** The water it swims in. */
+  reading: ZoneReading;
+}
+
+export interface WelcomeEvent {
+  deploymentId: string;
+  greeting: string;
+  share: number;
+  exposure: Exposure;
+  liquidationPrice: number | null;
+}
+
 export interface ArriveEvent extends ZoneReading {}
 
 export interface GuardianEvent {
-  kind: "serpent" | "drake";
-  deploymentId: string | null;
-  liquidationPrice: number | null;
+  key: string;
+  name: string;
+  warning: string;
+  reading: ZoneReading;
 }
 
 export interface ScoutsEvent {

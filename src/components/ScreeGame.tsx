@@ -156,8 +156,16 @@ export function ScreeGame(props: Props) {
   /* ── state pushed to the interface ────────────────────────────── */
 
   const pushed = useMemo<PushedState>(
-    () => ({ label: props.label, busy: props.busy, error: props.error, wallet: props.wallet, feed, chart }),
-    [props.label, props.busy, props.error, props.wallet, feed, chart],
+    () => ({
+      label: props.label,
+      headline: `ETH ${usd(spot)} · ${props.label}`,
+      busy: props.busy,
+      error: props.error,
+      wallet: props.wallet,
+      feed,
+      chart,
+    }),
+    [props.label, props.busy, props.error, props.wallet, feed, chart, spot],
   );
   const pushedRef = useRef(pushed);
   useEffect(() => {
@@ -209,6 +217,7 @@ export function ScreeGame(props: Props) {
         mono: cssVar("--font-mono", "ui-monospace, Menlo, monospace"),
         serif: cssVar("--font-body", "Georgia, serif"),
         display: cssVar("--font-display", "Georgia, serif"),
+        pixel: cssVar("--font-pixel", "monospace"),
       };
 
       const world = new WorldScene();
@@ -218,6 +227,7 @@ export function ScreeGame(props: Props) {
         parent: host,
         backgroundColor: "#141c22",
         pixelArt: true,
+        physics: { default: "arcade" },
         scale: { mode: PhaserLib.Scale.RESIZE, width: "100%", height: "100%" },
         banner: false,
       });
@@ -226,8 +236,6 @@ export function ScreeGame(props: Props) {
         grid,
         readAt,
         terraces,
-        crashZone: br.lowerBinder,
-        pumpZone: br.upperBinder,
         ui: {
           fonts,
           getState: () => pushedRef.current,
@@ -261,7 +269,7 @@ export function ScreeGame(props: Props) {
       uiRef.current = null;
       game?.destroy(true);
     };
-  }, [grid, readAt, terraces, br]);
+  }, [grid, readAt, terraces]);
 
   return (
     <div className="scree">
