@@ -35,10 +35,11 @@
     ]
   },
   "include": [
+    ".next/types/**/*.ts",
     "scripts/**/*.mjs",
     "src/**/*.ts",
     "src/**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next-build/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
