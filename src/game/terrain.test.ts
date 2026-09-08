@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { bracket } from "@/core/bracket";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import { fittedWindow, priceAt, rasterize } from "@/field/raster";
-import { Band, CORNER, TILE_PX, bandOf, buildTerrainGrid, dwellFyToTileY, priceFxToTileX } from "./terrain";
+import { Band, CORNER, TILE_PX, bandOf, buildTerrainGrid, dwellFyToTileY, footprintCells, isWater, priceFxToTileX } from "./terrain";
 
 const br = bracket(CARRY_BOOK, 0);
 const win = fittedWindow(SPOT_ETH_USD, br.lower, br.upper);
@@ -17,16 +17,21 @@ const fxOf = (price: number) => {
 const tileAt = (tx: number, ty: number) => grid.tiles[ty * grid.cols + tx]!;
 
 describe("bandOf", () => {
-  it("puts everything below sea level under water", () => {
-    expect(bandOf(-0.001, 1)).toBe(Band.WATER);
-    expect(bandOf(-5, 1)).toBe(Band.WATER);
+  it("puts everything below sea level under water, the shelf first and the deep below it", () => {
+    expect(bandOf(-0.001, 1)).toBe(Band.SHALLOW);
+    expect(bandOf(-0.05, 1)).toBe(Band.SHALLOW);
+    expect(bandOf(-0.07, 1)).toBe(Band.DEEP);
+    expect(bandOf(-5, 1)).toBe(Band.DEEP);
+    expect(isWater(Band.DEEP)).toBe(true);
+    expect(isWater(Band.COAST)).toBe(false);
   });
 
-  it("climbs through the bands with elevation", () => {
+  it("climbs through the biomes with elevation", () => {
     expect(bandOf(0, 1)).toBe(Band.COAST);
     expect(bandOf(0.3, 1)).toBe(Band.GRASS);
-    expect(bandOf(0.8, 1)).toBe(Band.HIGHLAND);
-    expect(bandOf(1, 1)).toBe(Band.MOUNTAIN);
+    expect(bandOf(0.7, 1)).toBe(Band.FOREST);
+    expect(bandOf(0.9, 1)).toBe(Band.MOUNTAIN);
+    expect(bandOf(1, 1)).toBe(Band.SNOW);
   });
 });
 
@@ -64,8 +69,8 @@ describe("buildTerrainGrid", () => {
     const bottom = grid.rows - 1;
     const wet = tileAt(Math.floor(priceFxToTileX(fxOf(br.lower! * 0.9), grid.cols)), bottom);
     const dry = tileAt(Math.floor(priceFxToTileX(fxOf(br.lower! * 1.12), grid.cols)), bottom);
-    expect(wet.lo).toBe(Band.WATER);
-    expect(dry.lo).toBeGreaterThan(Band.WATER);
+    expect(isWater(wet.lo)).toBe(true);
+    expect(isWater(dry.lo)).toBe(false);
     expect(grid.shoreline.length).toBeGreaterThan(0);
   });
 
@@ -73,18 +78,55 @@ describe("buildTerrainGrid", () => {
     expect(grid.today.fx).toBeGreaterThan(0);
     expect(grid.today.fx).toBeLessThan(1);
     const tile = tileAt(Math.min(grid.cols - 1, Math.floor(grid.today.fx * grid.cols)), grid.rows - 1);
-    expect(tile.lo).toBeGreaterThan(Band.WATER);
+    expect(isWater(tile.lo)).toBe(false);
   });
 
-  it("seats each territory's citadel on interior dry ground it owns", () => {
+  it("seats each holdfast on the highest dry ground its territory owns, with its whole footprint on that ground", () => {
     expect(grid.zones.length).toBeGreaterThan(0);
     expect(grid.citadels).toHaveLength(grid.zones.length);
     for (const c of grid.citadels) {
-      const tile = tileAt(c.tx, c.ty);
-      expect(tile.mask).toBe(0);
-      expect(tile.lo).toBeGreaterThan(Band.WATER);
-      expect(tile.owner).toBe(c.zone);
+      const anchor = tileAt(c.tx, c.ty);
+      expect(anchor.mask).toBe(0);
+      expect(anchor.owner).toBe(c.zone);
+      for (const cell of footprintCells(c.tx, c.ty, c.footprint)) {
+        const t = tileAt(cell.tx, cell.ty);
+        expect(isWater(t.lo)).toBe(false);
+        expect(t.owner).toBe(c.zone);
+      }
+      expect(c.ty - c.footprint.rise + 1).toBeGreaterThanOrEqual(0);
+      // No interior tile the zone owns, with room for the footprint, stands higher.
+      for (let ty = c.footprint.rise - 1; ty < grid.rows; ty++) {
+        for (let tx = 0; tx < grid.cols; tx++) {
+          const t = tileAt(tx, ty);
+          if (t.owner !== c.zone || t.mask !== 0 || isWater(t.lo)) continue;
+          const fits = footprintCells(tx, ty, c.footprint).every((cell) => {
+            if (cell.tx < 0 || cell.ty < 0 || cell.tx >= grid.cols || cell.ty >= grid.rows) return false;
+            const u = tileAt(cell.tx, cell.ty);
+            return u.owner === c.zone && !isWater(u.lo);
+          });
+          if (fits) expect(t.z).toBeLessThanOrEqual(c.z + 1e-9);
+        }
+      }
     }
+  });
+
+  it("marks every border tile on dry ground beside a tile another deployment binds", () => {
+    expect(grid.borders.length).toBeGreaterThan(0);
+    for (const b of grid.borders) {
+      const t = tileAt(b.tx, b.ty);
+      expect(isWater(t.lo)).toBe(false);
+      const east = b.tx + 1 < grid.cols ? tileAt(b.tx + 1, b.ty) : null;
+      const south = b.ty + 1 < grid.rows ? tileAt(b.tx, b.ty + 1) : null;
+      const differs = (n: typeof t | null) => !!n && n.owner >= 0 && !isWater(n.lo) && n.owner !== t.owner;
+      expect(differs(east) || differs(south)).toBe(true);
+    }
+  });
+
+  it("walls the pass where a long book meets a short one, and roads the rest", () => {
+    const kinds = new Set(grid.borders.map((b) => b.kind));
+    // The reference book is mixed, so it has both a pass and a same-side handover.
+    expect(kinds.has("wall")).toBe(true);
+    expect(kinds.has("road")).toBe(true);
   });
 
   it("ranks territories by share of the dry ground, largest first", () => {

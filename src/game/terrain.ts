@@ -3,6 +3,7 @@ import { colOfPrice } from "../field/raster";
 import type { Basket, Exposure } from "../core/types";
 import { exposure, liquidationPrice } from "../core/kernel";
 import { contour } from "../render/contours";
+import { footprintFor, type Footprint } from "./holdfasts";
 
 /**
  * Financial field → terrain grid.
@@ -11,34 +12,50 @@ import { contour } from "../render/contours";
  * (price, dwell) cell, and which lending deployment binds there. This module
  * turns that into something a tilemap can draw, and nothing here invents a
  * feature. Every band edge is an elevation threshold on measured ground, every
- * territory is the argmin partition, and every citadel stands on the dry
- * centroid of the ground its deployment actually rules.
+ * territory is the argmin partition, every border is where the argmin changes,
+ * and every holdfast stands on the highest ground its deployment rules.
  */
 
-/** Field pixels per tile. Four gives ~76 × 54 tiles on the default window. */
+/** Field pixels per tile. Four gives 64 × 64 tiles on the default window. */
 export const TILE_PX = 4;
 
 export enum Band {
-  WATER = 0,
-  COAST = 1,
-  GRASS = 2,
-  HIGHLAND = 3,
-  MOUNTAIN = 4,
+  /** Deep water: health well below one. The leviathans live here. */
+  DEEP = 0,
+  /** The shelf just under the surface: liquidated, but only just. */
+  SHALLOW = 1,
+  /** Beach, mudflat, driftwood: the first dry ground. */
+  COAST = 2,
+  /** Lowland plains. */
+  GRASS = 3,
+  /** Midland pine forest and rock. */
+  FOREST = 4,
+  /** Bare stone. */
+  MOUNTAIN = 5,
+  /** Snow and aether on the crest. */
+  SNOW = 6,
 }
-export const BAND_COUNT = 5;
+export const BAND_COUNT = 7;
 
-/** Elevation thresholds as fractions of the ceiling (max health-factor headroom). */
-export const THRESHOLDS = { coast: 0.06, grass: 0.62, highland: 0.92 } as const;
+/**
+ * Elevation thresholds. Water is split at an absolute depth; the dry bands
+ * are fractions of the ceiling (the book's maximum health-factor headroom).
+ */
+export const THRESHOLDS = { shallow: -0.06, coast: 0.05, grass: 0.5, forest: 0.8, mountain: 0.95 } as const;
 
 export function bandOf(z: number, ceiling: number): Band {
-  if (!Number.isFinite(z)) return Band.MOUNTAIN;
-  if (z < 0) return Band.WATER;
+  if (!Number.isFinite(z)) return Band.SNOW;
+  if (z < THRESHOLDS.shallow) return Band.DEEP;
+  if (z < 0) return Band.SHALLOW;
   const t = z / Math.max(1e-9, ceiling);
   if (t < THRESHOLDS.coast) return Band.COAST;
   if (t < THRESHOLDS.grass) return Band.GRASS;
-  if (t < THRESHOLDS.highland) return Band.HIGHLAND;
-  return Band.MOUNTAIN;
+  if (t < THRESHOLDS.forest) return Band.FOREST;
+  if (t < THRESHOLDS.mountain) return Band.MOUNTAIN;
+  return Band.SNOW;
 }
+
+export const isWater = (b: Band): boolean => b <= Band.SHALLOW;
 
 /** Corner bits of a tile's dual-grid mask. */
 export const CORNER = { TL: 1, TR: 2, BL: 4, BR: 8 } as const;
@@ -69,8 +86,11 @@ export interface Zone {
 export interface Citadel {
   zone: number;
   deploymentId: string;
+  /** Anchor tile: bottom-centre of the footprint. */
   tx: number;
   ty: number;
+  footprint: Footprint;
+  z: number;
   share: number;
 }
 
@@ -79,6 +99,14 @@ export interface Segment {
   y1: number;
   x2: number;
   y2: number;
+}
+
+/** A tile on a territory border, and what stands on it. */
+export interface Border {
+  tx: number;
+  ty: number;
+  /** A road where two books of the same side meet; a ruined wall where long meets short. */
+  kind: "road" | "wall";
 }
 
 export interface TerrainGrid {
@@ -96,6 +124,8 @@ export interface TerrainGrid {
   shoreline: Segment[];
   /** Territory boundaries — where the binding deployment changes — in tile units. */
   boundaries: Segment[];
+  /** The same boundaries as tiles, with the feature that marks them. */
+  borders: Border[];
 }
 
 /* ── sampling ────────────────────────────────────────────────────────── */
@@ -173,31 +203,21 @@ export function buildTerrainGrid(raster: Raster, baskets: readonly Basket[], spo
     })
     .sort((a, b) => b.share - a.share);
 
-  /* citadels: the dry centroid of each territory */
+  /* citadels: the highest ground each territory rules, with room to stand */
   const citadels: Citadel[] = [];
   for (const zone of zones) {
-    let sx = 0;
-    let sy = 0;
-    let n = 0;
-    for (let ty = 0; ty < rows; ty++) {
-      for (let tx = 0; tx < cols; tx++) {
-        const t = tiles[ty * cols + tx]!;
-        if (t.owner !== zone.index || t.lo === Band.WATER) continue;
-        sx += tx;
-        sy += ty;
-        n++;
-      }
-    }
-    if (n === 0) continue;
-    let tx = Math.round(sx / n);
-    let ty = Math.round(sy / n);
-    if (!ownsDry(tiles, cols, rows, zone.index, tx, ty)) {
-      const found = nearestOwnedDry(tiles, cols, rows, zone.index, tx, ty);
-      if (!found) continue;
-      tx = found.tx;
-      ty = found.ty;
-    }
-    citadels.push({ zone: zone.index, deploymentId: zone.deploymentId, tx, ty, share: zone.share });
+    const footprint = footprintFor(zone.deploymentId, zone.share);
+    const seat = highestSeat(tiles, cols, rows, zone.index, footprint) ?? highestSeat(tiles, cols, rows, zone.index, { w: 1, h: 1, rise: 1 });
+    if (!seat) continue;
+    citadels.push({
+      zone: zone.index,
+      deploymentId: zone.deploymentId,
+      tx: seat.tx,
+      ty: seat.ty,
+      footprint: seat.footprint,
+      z: seat.z,
+      share: zone.share,
+    });
   }
 
   /* today's price */
@@ -210,68 +230,115 @@ export function buildTerrainGrid(raster: Raster, baskets: readonly Basket[], spo
     const b = toTile(s.x2, s.y2);
     return { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
   });
-  const boundaries = territoryBoundaries(tiles, cols, rows);
+  const { boundaries, borders } = territoryBorders(tiles, cols, rows, zones);
 
-  return { cols, rows, ceiling, corners, tiles, zones, citadels, today, shoreline, boundaries };
+  return { cols, rows, ceiling, corners, tiles, zones, citadels, today, shoreline, boundaries, borders };
 }
 
-function ownsDry(tiles: TerrainTile[], cols: number, rows: number, zone: number, tx: number, ty: number): boolean {
+/* ── seats ───────────────────────────────────────────────────────────── */
+
+/** Cells under a footprint anchored at its bottom-centre tile. */
+export function footprintCells(tx: number, ty: number, footprint: { w: number; h: number }): { tx: number; ty: number }[] {
+  const x0 = tx - Math.floor(footprint.w / 2);
+  const out: { tx: number; ty: number }[] = [];
+  for (let dy = 0; dy < footprint.h; dy++) for (let dx = 0; dx < footprint.w; dx++) out.push({ tx: x0 + dx, ty: ty - dy });
+  return out;
+}
+
+function dryOwned(tiles: TerrainTile[], cols: number, rows: number, zone: number, tx: number, ty: number): boolean {
   if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return false;
   const t = tiles[ty * cols + tx]!;
-  return t.owner === zone && t.lo !== Band.WATER && t.mask === 0;
+  return t.owner === zone && !isWater(t.lo);
 }
 
-/** Spiral outward until an interior dry tile this zone owns turns up. */
-function nearestOwnedDry(
+/**
+ * The highest tile the zone owns on which the whole footprint stands on dry
+ * ground it also owns. Height is the reading, so the seat marks the safest
+ * point of the territory. Ties go to the tile nearest the territory's centre,
+ * which keeps seats off the edge of thin ridges.
+ */
+function highestSeat(
   tiles: TerrainTile[],
   cols: number,
   rows: number,
   zone: number,
-  tx: number,
-  ty: number,
-): { tx: number; ty: number } | null {
-  for (let r = 1; r < Math.max(cols, rows); r++) {
-    for (let d = -r; d <= r; d++) {
-      for (const c of [
-        { tx: tx + d, ty: ty - r },
-        { tx: tx + d, ty: ty + r },
-        { tx: tx - r, ty: ty + d },
-        { tx: tx + r, ty: ty + d },
-      ]) {
-        if (ownsDry(tiles, cols, rows, zone, c.tx, c.ty)) return c;
-      }
+  footprint: Footprint,
+): { tx: number; ty: number; z: number; footprint: Footprint } | null {
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      if (!dryOwned(tiles, cols, rows, zone, tx, ty)) continue;
+      sx += tx;
+      sy += ty;
+      n++;
     }
   }
-  return null;
+  if (n === 0) return null;
+  const cx = sx / n;
+  const cy = sy / n;
+
+  let best: { tx: number; ty: number; z: number; dist: number } | null = null;
+  // The whole structure must stand inside the map: its top row is `rise - 1` tiles above the anchor.
+  for (let ty = footprint.rise - 1; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      const anchor = tiles[ty * cols + tx]!;
+      if (anchor.mask !== 0 || !dryOwned(tiles, cols, rows, zone, tx, ty)) continue;
+      if (!footprintCells(tx, ty, footprint).every((c) => dryOwned(tiles, cols, rows, zone, c.tx, c.ty))) continue;
+      const dist = Math.hypot(tx - cx, ty - cy);
+      // Height decides; only an exact tie is broken by the pull toward the centre.
+      const higher = !best || anchor.z > best.z + 1e-9;
+      const tied = best && Math.abs(anchor.z - best.z) <= 1e-9 && dist < best.dist;
+      if (higher || tied) best = { tx, ty, z: anchor.z, dist };
+    }
+  }
+  return best ? { tx: best.tx, ty: best.ty, z: best.z, footprint } : null;
 }
 
+/* ── borders ─────────────────────────────────────────────────────────── */
+
 /**
- * Edges between tiles whose binding deployment differs, as short segments
- * along the shared tile edge. On dry ground only: under water the question of
- * who kills you first is already answered.
+ * Edges between dry tiles whose binding deployment differs, both as segments
+ * for drawing and as the tiles that carry the feature. A road runs where two
+ * books of the same side hand over; a ruined wall stands on the pass where a
+ * long book meets a short one, because that crest is the only place the
+ * ground can be crossed in both directions.
  */
-function territoryBoundaries(tiles: TerrainTile[], cols: number, rows: number): Segment[] {
-  const out: Segment[] = [];
+function territoryBorders(tiles: TerrainTile[], cols: number, rows: number, zones: Zone[]): { boundaries: Segment[]; borders: Border[] } {
+  const side = new Map<number, Exposure>(zones.map((z) => [z.index, z.exposure]));
+  const boundaries: Segment[] = [];
+  const marked = new Map<string, Border>();
+  const mark = (tx: number, ty: number, a: number, b: number) => {
+    const opposite = side.get(a) !== side.get(b) && side.get(a) !== "FLAT" && side.get(b) !== "FLAT";
+    const key = `${tx},${ty}`;
+    const prior = marked.get(key);
+    if (!prior || (opposite && prior.kind === "road")) marked.set(key, { tx, ty, kind: opposite ? "wall" : "road" });
+  };
   for (let ty = 0; ty < rows; ty++) {
     for (let tx = 0; tx < cols; tx++) {
       const t = tiles[ty * cols + tx]!;
-      if (t.owner < 0 || t.lo === Band.WATER) continue;
+      if (t.owner < 0 || isWater(t.lo)) continue;
       if (tx + 1 < cols) {
         const r = tiles[ty * cols + tx + 1]!;
-        if (r.owner >= 0 && r.lo !== Band.WATER && r.owner !== t.owner) {
-          out.push({ x1: tx + 1, y1: ty, x2: tx + 1, y2: ty + 1 });
+        if (r.owner >= 0 && !isWater(r.lo) && r.owner !== t.owner) {
+          boundaries.push({ x1: tx + 1, y1: ty, x2: tx + 1, y2: ty + 1 });
+          mark(tx, ty, t.owner, r.owner);
         }
       }
       if (ty + 1 < rows) {
         const b = tiles[(ty + 1) * cols + tx]!;
-        if (b.owner >= 0 && b.lo !== Band.WATER && b.owner !== t.owner) {
-          out.push({ x1: tx, y1: ty + 1, x2: tx + 1, y2: ty + 1 });
+        if (b.owner >= 0 && !isWater(b.lo) && b.owner !== t.owner) {
+          boundaries.push({ x1: tx, y1: ty + 1, x2: tx + 1, y2: ty + 1 });
+          mark(tx, ty, t.owner, b.owner);
         }
       }
     }
   }
-  return out;
+  return { boundaries, borders: [...marked.values()] };
 }
+
+/* ── axes ────────────────────────────────────────────────────────────── */
 
 /** Price axis fraction → tile x (float). */
 export function priceFxToTileX(fx: number, cols: number): number {

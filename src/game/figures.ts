@@ -1,52 +1,61 @@
 /**
- * Everything that stands on the ground, as frame indices into Kenney's CC0
- * Tiny Town and Tiny Dungeon sheets (16px, 12 columns, row-major).
+ * Everything that stands on the ground, as sheet keys and frame indices.
+ *
+ * Two CC0 sheets from Kenney (Tiny Town, Tiny Dungeon; 16px, 12 columns,
+ * row-major) and the sheets baked by scripts/bake-sprites.ts.
  */
-export const SHEET = { town: "kenney-tiny-town", dungeon: "kenney-tiny-dungeon" } as const;
+import type { ClutterKind } from "./clutter";
 
-export const FRAME = {
-  /** The purple-hatted wizard: the surveyor. */
-  avatar: 84,
-  /** The coiled worm: guardian of the drowned ground on the crash side. */
-  serpent: 123,
-  /** The red crawler: guardian of the high shore on the pump side. */
-  beast: 110,
+export const SHEET = {
+  town: "kenney-tiny-town",
+  dungeon: "kenney-tiny-dungeon",
+  surveyor: "scree-surveyor",
+  monsters: "scree-monsters",
+  clutter: "scree-clutter",
+  peaks: "scree-peaks",
+  fx: "scree-fx",
+  roads: "scree-roads",
 } as const;
 
-/** Trees by band: green conifers and round trees on grass, autumn stands on the highland. */
-export const TREES = {
-  grass: [4, 7, 8, 5, 16, 18, 19] as readonly number[],
-  highland: [3, 9, 10, 15, 21, 22] as readonly number[],
-} as const;
+/** Particle motes and living parts, frames of the fx sheet. */
+export const FX = { bubble: 0, droplet: 1, spark: 2, smoke: 3, cog: 4, orb: 5, glow: 6, window: 7 } as const;
 
-/**
- * Seats composed from the pack's castle and house pieces. Rows top to bottom;
- * -1 is an empty cell. Which one a deployment gets follows its share of the
- * ground it binds.
- */
-export const SEATS = {
-  castle: [
-    [96, 97, 97, 97, 98],
-    [125, 126, 114, 126, 125],
-    [126, 125, 111, 125, 126],
-  ],
-  hall: [
-    [-1, 52, 53, 54, -1],
-    [-1, 64, 65, 66, -1],
-    [-1, 88, 89, 90, -1],
-  ],
-  tower: [[114], [125], [123]],
-} as const;
-export type SeatKind = keyof typeof SEATS;
+/** The surveyor sheet: 4 frames per row, rows in this order. */
+export const SURVEYOR = { frameWidth: 16, frameHeight: 18, rows: ["idle", "walk_down", "walk_up", "walk_left", "walk_right"] as const };
 
-export function seatKindFor(share: number): SeatKind {
-  if (share > 0.34) return "castle";
-  if (share > 0.15) return "hall";
-  return "tower";
-}
+/** The monsters sheet: 12 frames per monster, swim 0-3, dive 4-7, surface 8-11. */
+export const MONSTERS = {
+  frameWidth: 16,
+  frameHeight: 16,
+  kinds: [
+    { key: "kraken", row: 0, name: "Slippage Kraken", warning: "Thin books down here turn a small sale into a deep one. Selling into this water moves the price you sell at." },
+    { key: "leviathan", row: 1, name: "Cascading Liquidation Leviathan", warning: "One liquidation feeds the next. Forced sales push price into the next book's shore, and that book sells too." },
+    { key: "wyrm", row: 2, name: "Oracle Drift Wyrm", warning: "Oracles lag the market. The water is deeper than the last print says, and the print is what liquidates you." },
+  ] as const,
+};
+export type MonsterKind = (typeof MONSTERS.kinds)[number]["key"];
 
-/** Colours for zone flags and boundaries, by zone order. */
-export const ZONE_COLOURS = [0x35e0e8, 0xe0b25a, 0xe2603a, 0x9bb06f, 0xc58bd6, 0x6fa8dc];
+/** Clutter kinds → the sheet and frames that draw them. */
+export const CLUTTER: Record<ClutterKind, { sheet: string; frames: readonly number[] }> = {
+  tree: { sheet: SHEET.town, frames: [5, 6, 30, 31, 32] },
+  pine: { sheet: SHEET.town, frames: [4, 7, 8, 16, 18, 19, 20, 28] },
+  bush: { sheet: SHEET.clutter, frames: [12, 13] },
+  mushroom: { sheet: SHEET.town, frames: [29] },
+  rock: { sheet: SHEET.clutter, frames: [0, 1, 2] },
+  crystal: { sheet: SHEET.clutter, frames: [3, 4, 5] },
+  driftwood: { sheet: SHEET.clutter, frames: [6, 7] },
+  log: { sheet: SHEET.clutter, frames: [14] },
+  ruin: { sheet: SHEET.clutter, frames: [8, 9] },
+  pillar: { sheet: SHEET.dungeon, frames: [18, 30] },
+  statue: { sheet: SHEET.dungeon, frames: [19, 20] },
+  skull: { sheet: SHEET.dungeon, frames: [74] },
+  snowrock: { sheet: SHEET.clutter, frames: [10, 11] },
+  peak: { sheet: SHEET.peaks, frames: [0, 1, 2] },
+  snowpeak: { sheet: SHEET.peaks, frames: [3, 4, 5] },
+};
+
+/** Ruined wall pieces along a long/short border, Tiny Town frames. */
+export const WALL_PIECES = [125, 126, 111] as const;
 
 /** Terrace platform: the pack's castle wall as a 9-slice (left, middle, right per row). */
 export const TERRACE = {
@@ -54,3 +63,6 @@ export const TERRACE = {
   body: [108, 109, 110] as readonly number[],
   bottom: [120, 121, 122] as readonly number[],
 } as const;
+
+/** Colours for zone flags and boundaries, by zone order. */
+export const ZONE_COLOURS = [0x35e0e8, 0xe0b25a, 0xe2603a, 0x9bb06f, 0xc58bd6, 0x6fa8dc];
