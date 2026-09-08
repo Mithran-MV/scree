@@ -216,8 +216,8 @@ export function WorldView({ baskets, spot, onHover, onFeatures, children }: Prop
   const place = (x: number, y: number, nudge: number) => {
     let fx = x / paint.width;
     let fy = y / paint.height;
-    if (fy < 0.3 && fx > 0.6) fy = 0.3 + nudge;
-    return { left: `${fx * 100}%`, top: `${Math.min(0.9, Math.max(0.14, fy)) * 100}%` };
+    if (fy < 0.34 && fx > 0.52) fy = 0.34 + nudge;
+    return { left: `${fx * 100}%`, top: `${Math.min(0.88, Math.max(0.22, fy)) * 100}%` };
   };
 
   const passSpot =

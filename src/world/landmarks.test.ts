@@ -26,17 +26,22 @@ describe("landmarks", () => {
     }
   });
 
-  it("stands each marker on the highest ground of its own territory", () => {
+  it("stands each marker on dry ground inside its own territory", () => {
     const { width } = win;
     for (const m of marks) {
       const index = mixed.deploymentIds.indexOf(m.deploymentId);
-      let highest = -Infinity;
-      for (let i = 0; i < mixed.z.length; i++) {
-        if (mixed.argmin[i] === index && mixed.z[i]! > highest) highest = mixed.z[i]!;
-      }
-      expect(m.elevation).toBeCloseTo(highest, 12);
-      expect(mixed.argmin[m.row * width + m.col]).toBe(index);
+      const at = m.row * width + m.col;
+      expect(mixed.argmin[at]).toBe(index);
+      expect(m.elevation).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it("spreads the settlements out instead of stacking them on one edge", () => {
+    // Placing each on its summit put every one of them on the bottom row: with
+    // no interest accrued, the ground is always highest at dwell zero.
+    const rows = new Set(marks.map((m) => m.row));
+    expect(rows.size).toBeGreaterThan(1);
+    expect(Math.min(...marks.map((m) => m.row))).toBeGreaterThan(0);
   });
 
   it("orders them by how much of the map each one owns", () => {

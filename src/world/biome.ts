@@ -86,7 +86,7 @@ export function biomeColor(input: BiomeInput): [number, number, number] {
     base = rampAt(LAND_BANDS, Math.min(1, z / Math.max(ceiling, 1e-6)));
     // Soil holds on gentle ground and sheds on steep ground. The exponent keeps
     // rolling country green and only turns the genuinely steep faces to stone.
-    const bare = Math.min(1, Math.max(0, (steepness - 0.66) / 0.3)) ** 1.4;
+    const bare = Math.min(1, Math.max(0, (steepness - 0.78) / 0.22)) ** 1.4;
     if (bare > 0) {
       const stone = steepness > 0.82 ? CLIFF : ROCK;
       base = {

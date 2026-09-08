@@ -124,7 +124,7 @@ export function paintWorld(r: Raster, size: WorldSize): WorldPaint {
       } else {
         const height = Math.min(1, z / ceiling);
         color = rampAt(LAND_BANDS, ditheredStep(height, 7, px, py));
-        const bare = Math.min(1, Math.max(0, (steepness - 0.66) / 0.3));
+        const bare = Math.min(1, Math.max(0, (steepness - 0.78) / 0.22));
         // Rock breaks through on steep faces, itself dithered so the boundary
         // is stippled rather than a clean sweep.
         if (ditheredStep(bare, 3, px + 2, py + 1) > 0.34) {
