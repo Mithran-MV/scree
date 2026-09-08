@@ -68,12 +68,15 @@ export function scatterWorld(
 ): ScatterItem[] {
   const { width: W, height: H } = paint;
   const items: ScatterItem[] = [];
-  const step = 5;
+  const step = 6;
 
   for (let gy = 2; gy < H - 6; gy += step) {
     for (let gx = 2; gx < W - 6; gx += step) {
       const jitter = hash(gx, gy, 1);
-      if (jitter > 0.74) continue; // thin it out, or the world reads as a lawn
+      // Thinned hard on purpose. A closed canopy hides the streams, the ruins
+      // and the track underneath it, and those carry more meaning than the
+      // hundredth tree does.
+      if (jitter > 0.54) continue;
 
       const x = gx + Math.floor(hash(gx, gy, 2) * (step - 1));
       const y = gy + Math.floor(hash(gx, gy, 3) * (step - 1));

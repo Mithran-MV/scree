@@ -119,7 +119,7 @@ export const BANNER_COLOURS = ["#b4472c", "#3f6e94", "#c2a34a", "#6a8f56"];
  * reaches the sea. On a wallet with a ridge they fork away on both sides, which
  * is the same fact the terrain is trying to tell you, said in water.
  */
-export function drawStreams(ctx: Ctx, paint: WorldPaint, seedCount = 14): void {
+export function drawStreams(ctx: Ctx, paint: WorldPaint, seedCount = 22): void {
   const { width: W, height: H, elevation, wet } = paint;
   const at = (x: number, y: number) => y * W + x;
 
@@ -174,12 +174,20 @@ export function drawStreams(ctx: Ctx, paint: WorldPaint, seedCount = 14): void {
     // A trickle that dies after three cells is noise, not a watercourse.
     if (path.length < 8) continue;
     cut++;
-    for (const p of path) {
+    for (let i = 0; i < path.length; i++) {
+      const p = path[i]!;
       drawn.add(at(p.x, p.y));
-      ctx.fillStyle = "#5e8f96";
-      ctx.fillRect(p.x, p.y, 1, 1);
-      ctx.fillStyle = "rgba(46,72,78,0.5)";
+      // A watercourse widens as it runs, so the lower reaches read as a river
+      // and the headwaters as a trickle.
+      const grown = i > path.length * 0.55;
+      ctx.fillStyle = "rgba(38,62,68,0.55)";
       ctx.fillRect(p.x, p.y + 1, 1, 1);
+      ctx.fillStyle = "#77b3ba";
+      ctx.fillRect(p.x, p.y, 1, 1);
+      if (grown && p.y > 0) {
+        ctx.fillStyle = "#5e959d";
+        ctx.fillRect(p.x, p.y - 1, 1, 1);
+      }
     }
   }
 }

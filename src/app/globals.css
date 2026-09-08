@@ -219,7 +219,7 @@ a { color: var(--accent); }
   position: absolute;
   /* Above the mark, the way a name sits above a settlement on a map, and clear
      of the readout that lives along the bottom edge. */
-  transform: translate(-50%, calc(-100% - 14px));
+  transform: translate(-50%, calc(-100% - 26px));
   font-family: var(--mono);
   font-size: 10px;
   line-height: 1.35;
