@@ -97,7 +97,8 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
   // Canopy first, then the landmarks that stand out of it, then the seats.
   drawFurniture(ctx, placeForest(field));
   drawFurniture(ctx, placeFurniture(field, keepOut));
-  drawFurniture(ctx, seatSprites);
+  // The seats themselves are not baked: the world draws each as its own sprite
+  // at nearly twice the ground scale, so they stand over the map rather than in it.
   if (wardAt) blit(ctx, WARD_CIRCLE, wardAt.x, wardAt.y);
   drawFurniture(ctx, placeWinged(field));
 

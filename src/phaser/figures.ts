@@ -10,58 +10,96 @@ import type { Sprite } from "../arcane/figures";
 
 const MAGE: Record<string, string> = {
   h: "#3b5f9c", // hat
-  H: "#2b4778",
+  H: "#2b4778", // hat shadow
+  b: "#c9a866", // hat band
   f: "#e8c9a8", // face
+  F: "#d3a985", // face shadow
+  k: "#0a1330", // eyes / outline
   w: "#e9e6da", // beard
+  W: "#c9c5b6", // beard shadow
   r: "#2f4f86", // robe
-  R: "#1a2c52",
+  R: "#1a2c52", // robe shadow
   g: "#c9a866", // trim
+  c: "#3d5c8a", // cloak
+  C: "#243a60", // cloak shadow
   s: "#6d5729", // staff
-  c: "#8ef0f7", // crystal
-  k: "#0a1330",
+  o: "#8ef0f7", // crystal
+  O: "#d8fbff", // crystal core
 };
 
+/**
+ * The Data-Seeker, who walks the chart.
+ *
+ * Eighteen by twenty-eight, so the hat has a brim and a band, the beard has a
+ * shadow, and the staff has a crystal that reads as lit. Two frames: the second
+ * swaps the legs and lifts the staff, which is all a figure this size needs to
+ * be seen walking. He faces east; the scene flips him to face west.
+ */
 export const MAGE_WALK: Sprite[] = [
   {
     palette: MAGE,
     art: [
-      ".....hh.....",
-      "....hHHh....",
-      "...hHHHHh...",
-      "..hHHcHHHh..",
-      ".HHHHHHHHHH.",
-      "....ffff....",
-      "....fkfk....",
-      "....wwww....",
-      "...wwwwww...",
-      "..grrrrrrg.s",
-      ".rrrRrrRrr.s",
-      ".rrrrrrrrr.s",
-      ".rrrRrrRrr.s",
-      ".RRrrrrrrR.s",
-      "..RR..RR...s",
-      "..kk..kk....",
+      ".......hhhh.......",
+      "......hHHHHh......",
+      ".....hHHHHHHh.....",
+      "....hHHHHHHHHh....",
+      "...hHHHHoHHHHHh...",
+      "..hHHHHHOHHHHHHh..",
+      ".hHHHHHHHHHHHHHHh.",
+      ".bbbbbbbbbbbbbbbb.",
+      "......ffffff......",
+      ".....ffkffkff.....",
+      ".....ffffffff.....",
+      "......fFFFFf......",
+      ".....wwwwwwww.....",
+      "....wwwwwwwwww....",
+      "....wWwwwwwwWw....",
+      ".....wwwwwwww.....",
+      "......wwwwww......",
+      "..cggrrrrrrrrggc.s",
+      ".cCrrrRrrrrRrrrCcs",
+      ".ccrrrrrrrrrrrrccs",
+      ".ccrrrRrrrrRrrrccs",
+      ".CcrrrrrrgrrrrrcCs",
+      "..CrrrRrrgrrRrrC.s",
+      "...RRrrrrgrrrrRR.s",
+      "...RRrrrrgrrrrRR.s",
+      "....RR......RR...s",
+      "....kk......kk...s",
+      "..................",
     ],
   },
   {
     palette: MAGE,
     art: [
-      ".....hh.....",
-      "....hHHh....",
-      "...hHHHHh...",
-      "..hHHcHHHh..",
-      ".HHHHHHHHHH.",
-      "....ffff....",
-      "....fkfk....",
-      "....wwww....",
-      "...wwwwww...",
-      "..grrrrrrg.s",
-      ".rrrRrrRrr.s",
-      ".rrrrrrrrr.s",
-      ".rrrRrrRrrs.",
-      ".RRrrrrrrRs.",
-      ".RR....RR...",
-      ".kk....kk...",
+      ".......hhhh.......",
+      "......hHHHHh......",
+      ".....hHHHHHHh.....",
+      "....hHHHHHHHHh....",
+      "...hHHHHoHHHHHh...",
+      "..hHHHHHOHHHHHHh..",
+      ".hHHHHHHHHHHHHHHh.",
+      ".bbbbbbbbbbbbbbbb.",
+      "......ffffff......",
+      ".....ffkffkff.....",
+      ".....ffffffff.....",
+      "......fFFFFf......",
+      ".....wwwwwwww.....",
+      "....wwwwwwwwww....",
+      "....wWwwwwwwWw....",
+      ".....wwwwwwww.....",
+      "......wwwwww......",
+      "..cggrrrrrrrrggcs.",
+      ".cCrrrRrrrrRrrrCs.",
+      ".ccrrrrrrrrrrrrcs.",
+      ".ccrrrRrrrrRrrrcs.",
+      ".CcrrrrrrgrrrrrCs.",
+      "..CrrrRrrgrrRrrCs.",
+      "...RRrrrrgrrrrRRs.",
+      "...RRrrrrgrrrrRR..",
+      "...RR........RR...",
+      "...kk........kk...",
+      "..................",
     ],
   },
 ];

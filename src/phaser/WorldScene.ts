@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Sprite } from "../arcane/figures";
 import type { BakedChart } from "./bakeChart";
 import { DRAKE_ROOST, MAGE_WALK, SCOUT, SCOUT_LOST, SERPENT_COILS } from "./figures";
+import { SEAT_TEMPLE, SEAT_TOWER, SEAT_ZIGGURAT, seatFor } from "./seats";
 import { T } from "./theme";
 import { hex } from "./chrome";
 
@@ -33,7 +34,15 @@ const KEYS = {
   lost: "w-lost",
   serpent: "w-serpent",
   drake: "w-drake",
+  ziggurat: "w-seat-ziggurat",
+  temple: "w-seat-temple",
+  tower: "w-seat-tower",
 } as const;
+
+/** How much larger than the ground the figures stand. */
+const SEAT_SCALE = SCALE * 1.7;
+const MAGE_SCALE = SCALE * 1.15;
+const GUARDIAN_SCALE = SCALE * 1.35;
 
 /**
  * The world, with someone in it.
@@ -99,6 +108,23 @@ export class WorldScene extends Phaser.Scene {
         .setDepth(3);
     }
 
+    // The seats, standing over the map.
+    for (const seat of chart.seats) {
+      const sprite = seatFor(seat.share);
+      const key = sprite === SEAT_ZIGGURAT ? KEYS.ziggurat : sprite === SEAT_TEMPLE ? KEYS.temple : KEYS.tower;
+      const img = this.add
+        .image(seat.at.x * SCALE, seat.at.y * SCALE + SCALE * 2, key)
+        .setOrigin(0.5, 1)
+        .setScale(SEAT_SCALE)
+        .setDepth(6);
+      img.enableFilters();
+      img.filters?.internal.addGlow(T.ley, 3, 0, 1);
+      // A footing shadow, so it stands on the ground rather than floating.
+      this.add
+        .ellipse(img.x, img.y + SCALE, img.displayWidth * 0.9, SCALE * 3, 0x000000, 0.4)
+        .setDepth(5);
+    }
+
     for (const b of chart.beacons) {
       const arc = this.add.circle(b.x * SCALE, b.y * SCALE, SCALE, T.leyBright, 0.9).setDepth(4);
       this.tweens.add({
@@ -125,10 +151,12 @@ export class WorldScene extends Phaser.Scene {
     this.mage = this.add
       .sprite(this.opts.start.x * SCALE, this.opts.start.y * SCALE, KEYS.mage0)
       .setOrigin(0.5, 1)
-      .setScale(SCALE * 0.9)
+      .setScale(MAGE_SCALE)
       .setDepth(10);
+    this.mage.enableFilters();
+    this.mage.filters?.internal.addGlow(T.ley, 2, 0, 1);
 
-    const halo = this.add.circle(0, 0, SCALE * 3, T.ley, 0).setStrokeStyle(1.5, T.ley, 0.7).setDepth(9);
+    const halo = this.add.circle(0, 0, SCALE * 4, T.ley, 0).setStrokeStyle(2, T.ley, 0.7).setDepth(9);
     this.tweens.add({
       targets: halo,
       scale: { from: 0.7, to: 2.2 },
@@ -159,38 +187,45 @@ export class WorldScene extends Phaser.Scene {
 
   /* ── walking ─────────────────────────────────────────────────────── */
 
-  /** Ask the mage to walk to a chart coordinate. */
+  /**
+   * Ask the mage to walk to a chart coordinate.
+   *
+   * A tween with a duration set from the distance, rather than a per-frame
+   * step: the walk is then a single owned object that can be replaced by the
+   * next click, and its speed does not depend on what the frame delta is.
+   */
   walkTo(cx: number, cy: number) {
     const { chart } = this.opts;
-    this.target = {
+    const target = {
       x: Phaser.Math.Clamp(cx, 2, chart.width - 3),
       y: Phaser.Math.Clamp(cy, 4, chart.height - 2),
     };
+    this.target = target;
+    const tx = target.x * SCALE;
+    const ty = target.y * SCALE;
+    const dist = Math.hypot(tx - this.mage.x, ty - this.mage.y);
+    const pixelsPerSecond = 110 * SCALE;
+
+    this.tweens.killTweensOf(this.mage);
+    this.mage.setFlipX(tx < this.mage.x);
     this.mage.play("mage-walk", true);
-  }
-
-  override update(_time: number, delta: number) {
-    if (this.target) {
-      const tx = this.target.x * SCALE;
-      const ty = this.target.y * SCALE;
-      const dx = tx - this.mage.x;
-      const dy = ty - this.mage.y;
-      const dist = Math.hypot(dx, dy);
-      const speed = 0.11 * delta * SCALE;
-
-      if (dist <= speed) {
-        this.mage.setPosition(tx, ty);
+    this.tweens.add({
+      targets: this.mage,
+      x: tx,
+      y: ty,
+      duration: Math.max(120, (dist / pixelsPerSecond) * 1000),
+      ease: "Linear",
+      onComplete: () => {
+        if (this.target !== target) return;
+        this.target = null;
         this.mage.stop();
         this.mage.setTexture(KEYS.mage0);
-        const at = this.target;
-        this.target = null;
-        this.arrive(at.x, at.y);
-      } else {
-        this.mage.x += (dx / dist) * speed;
-        this.mage.y += (dy / dist) * speed;
-        this.mage.setFlipX(dx < 0);
-      }
-    }
+        this.arrive(target.x, target.y);
+      },
+    });
+  }
+
+  override update() {
     this.watchSeats();
     this.watchGuardians();
   }
@@ -266,9 +301,9 @@ export class WorldScene extends Phaser.Scene {
     const sprite = this.add
       .image(cx * SCALE, cy * SCALE, key)
       .setOrigin(0.5, 1)
-      .setScale(SCALE * 0.95)
-      .setAlpha(0.55)
-      .setDepth(5);
+      .setScale(GUARDIAN_SCALE)
+      .setAlpha(0.6)
+      .setDepth(7);
     this.tweens.add({
       targets: sprite,
       y: sprite.y - SCALE * 1.5,
@@ -289,7 +324,7 @@ export class WorldScene extends Phaser.Scene {
       if (near && !g.stirred) {
         g.stirred = true;
         g.sprite.setAlpha(1);
-        this.tweens.add({ targets: g.sprite, scaleX: SCALE * 1.15, scaleY: SCALE * 1.15, duration: 380, yoyo: true });
+        this.tweens.add({ targets: g.sprite, scaleX: GUARDIAN_SCALE * 1.15, scaleY: GUARDIAN_SCALE * 1.15, duration: 380, yoyo: true });
         this.cameras.main.shake(140, 0.0025);
         this.opts.onGuardian?.(g.kind, g.kind === "serpent" ? this.opts.crashBinder : this.opts.pumpBinder);
       } else if (!near && g.stirred) {
@@ -381,6 +416,9 @@ export class WorldScene extends Phaser.Scene {
     this.bakeSprite(KEYS.lost, SCOUT_LOST);
     this.bakeSprite(KEYS.serpent, SERPENT_COILS);
     this.bakeSprite(KEYS.drake, DRAKE_ROOST);
+    this.bakeSprite(KEYS.ziggurat, SEAT_ZIGGURAT);
+    this.bakeSprite(KEYS.temple, SEAT_TEMPLE);
+    this.bakeSprite(KEYS.tower, SEAT_TOWER);
 
     if (!this.textures.exists(KEYS.mote)) {
       const size = 8;

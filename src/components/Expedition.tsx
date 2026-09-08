@@ -186,6 +186,9 @@ export function Expedition(props: Props) {
 
       gameRef.current = game;
       sceneRef.current = scene;
+      // Expose the game on its host element so tooling and tests can drive
+      // the loop directly, without reaching into React.
+      (host as unknown as { __game?: Phaser.Game }).__game = game;
     })();
 
     return () => {
