@@ -1,78 +1,56 @@
 import type { Raster } from "../field/raster";
-import { colorForElevation } from "./palette";
 
-export interface ShadeOptions {
-  /** Sun direction in degrees clockwise from the top of the map. */
-  azimuth?: number;
-  /** Sun height in degrees above the horizon. */
-  altitude?: number;
-  /** Vertical exaggeration. Terrain this shallow is invisible without it. */
-  exaggeration?: number;
-  /**
-   * Elevation the top of the palette represents. Defaults to the highest
-   * ground actually present, because a book whose best health factor is 1.16
-   * would otherwise be painted entirely in the first sixth of the land ramp
-   * and read as featureless.
-   */
-  ceiling?: number;
+/**
+ * Shared surface primitives.
+ *
+ * This module used to light the terrain with a sun at 315 degrees and 45 above
+ * the horizon. That lamp does not exist. It was the largest piece of pure
+ * fiction on a map whose entire argument is that its ground was measured, and
+ * on a sheet cut in hachures it is worse than unnecessary: Lambertian tone and
+ * hachure density encode the same slope nonlinearly, so stacking them produces
+ * mud. Hachures are direction-agnostic by construction — a slope facing left
+ * and a slope facing right of equal steepness are cut identically — so relief
+ * became a countable measurement instead of a picture of a light, and the light
+ * was deleted rather than dimmed.
+ *
+ * What survives is the surface arithmetic every layer needs to agree on.
+ */
+
+/** The elevation range the display is scaled against. */
+export function spanOf(r: Raster): number {
+  return Math.max(0.05, r.range.max - Math.max(r.range.min, -0.5));
 }
 
 /**
- * Paint the raster as a shaded relief map.
+ * Vertical exaggeration.
  *
- * The elevations involved are tiny in absolute terms — a health factor moves
- * through a range of about one — so the surface is exaggerated hard before the
- * light is applied. The exaggeration is a display choice and changes no number
- * the interface reports; the readout and the counters always come from `z`.
+ * A health factor moves through a range of about one, so unexaggerated relief
+ * is invisible. This is a display choice and it changes no number the interface
+ * reports — but because it is a choice, the multiplier is printed on the plate.
  */
-export function hillshade(r: Raster, opts: ShadeOptions = {}): ImageDataLike {
-  const { width, height } = r.window;
-  const azimuth = ((opts.azimuth ?? 315) * Math.PI) / 180;
-  const altitude = ((opts.altitude ?? 45) * Math.PI) / 180;
-  // Relief is exaggerated relative to the range on show, so a shallow book
-  // is lit as legibly as a steep one without the light implying a gradient
-  // that is not there.
-  const span = Math.max(0.05, r.range.max - Math.max(r.range.min, -0.5));
-  const exaggeration = opts.exaggeration ?? 12 / span;
-  const ceiling = opts.ceiling ?? Math.max(0.05, r.range.max);
+export function exaggerationFor(r: Raster): number {
+  return 12 / spanOf(r);
+}
 
-  const pixels = new Uint8ClampedArray(new ArrayBuffer(width * height * 4));
-  const zenith = Math.PI / 2 - altitude;
-
-  for (let row = 0; row < height; row++) {
-    for (let col = 0; col < width; col++) {
-      const z = r.z[row * width + col]!;
-      const base = colorForElevation(z, ceiling);
-
-      const dzdx = (sampleZ(r, col + 1, row) - sampleZ(r, col - 1, row)) * 0.5 * exaggeration;
-      const dzdy = (sampleZ(r, col, row + 1) - sampleZ(r, col, row - 1)) * 0.5 * exaggeration;
-
-      const slope = Math.atan(Math.hypot(dzdx, dzdy));
-      const aspect = Math.atan2(dzdy, -dzdx);
-      let light =
-        Math.cos(zenith) * Math.cos(slope) +
-        Math.sin(zenith) * Math.sin(slope) * Math.cos(azimuth - aspect);
-      light = 0.55 + 0.65 * Math.max(0, Math.min(1, light));
-
-      // Underwater ground is lit far more softly, so the shoreline reads as a
-      // boundary between two materials rather than one continuous slope.
-      const strength = z < 0 ? 0.45 : 1;
-      const lit = 1 + (light - 1) * strength;
-
-      const at = (row * width + col) * 4;
-      pixels[at] = base.r * lit;
-      pixels[at + 1] = base.g * lit;
-      pixels[at + 2] = base.b * lit;
-      pixels[at + 3] = 255;
-    }
-  }
-
-  return { width, height, data: pixels };
+/**
+ * Gradient at a cell, already exaggerated. One definition, read by the wash,
+ * the hachures and the staff, so none of them can disagree about the surface.
+ */
+export function gradientAt(
+  r: Raster,
+  col: number,
+  row: number,
+  exaggeration: number,
+): { dzdx: number; dzdy: number } {
+  return {
+    dzdx: (sampleZ(r, col + 1, row) - sampleZ(r, col - 1, row)) * 0.5 * exaggeration,
+    dzdy: (sampleZ(r, col, row + 1) - sampleZ(r, col, row - 1)) * 0.5 * exaggeration,
+  };
 }
 
 /**
  * Structurally an ImageData, without needing a DOM to construct one, so the
- * shading is testable in plain Node. The buffer is pinned to a plain
+ * surface layers stay testable in plain Node. The buffer is pinned to a plain
  * ArrayBuffer so it can be handed straight to the real `ImageData`.
  */
 export interface ImageDataLike {
@@ -81,7 +59,7 @@ export interface ImageDataLike {
   data: Uint8ClampedArray<ArrayBuffer>;
 }
 
-function sampleZ(r: Raster, col: number, row: number): number {
+export function sampleZ(r: Raster, col: number, row: number): number {
   const { width, height } = r.window;
   const c = Math.min(width - 1, Math.max(0, col));
   const y = Math.min(height - 1, Math.max(0, row));
