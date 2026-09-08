@@ -1,8 +1,7 @@
 import Phaser from "phaser";
 import type { Sprite } from "../arcane/figures";
 import type { BakedChart } from "./bakeChart";
-import { DRAKE_ROOST, MAGE_WALK, SCOUT, SCOUT_LOST, SERPENT_COILS } from "./figures";
-import { SEAT_TEMPLE, SEAT_TOWER, SEAT_ZIGGURAT, seatFor } from "./seats";
+import { SCOUT, SCOUT_LOST } from "./figures";
 import { T } from "./theme";
 import { hex } from "./chrome";
 
@@ -28,19 +27,45 @@ const SCALE = 4;
 const KEYS = {
   terrain: "w-terrain",
   mote: "w-mote",
-  mage0: "w-mage-0",
-  mage1: "w-mage-1",
   scout: "w-scout",
   lost: "w-lost",
-  serpent: "w-serpent",
-  drake: "w-drake",
-  ziggurat: "w-seat-ziggurat",
-  temple: "w-seat-temple",
-  tower: "w-seat-tower",
 } as const;
 
+/**
+ * Kenney's CC0 "Tiny" packs, 16px tiles in 12-column sheets. Frame numbers are
+ * indices into the packed tilemap, row-major. Public domain, so committed
+ * alongside their licence files under public/assets/kenney.
+ */
+const SHEET = { dungeon: "kenney-tiny-dungeon", town: "kenney-tiny-town" } as const;
+const FRAME = {
+  mage: 84, // the purple-hatted wizard
+  serpent: 123, // the coiled worm: guardian of the drowned ground
+  beast: 110, // the red crawler: guardian of the high shore
+} as const;
+
+/** Kenney's CC0 Map Pack, 64px overworld tiles, one image each. */
+const MAP = {
+  castle: "kenney-map-castle",
+  tower: "kenney-map-tower",
+  pyramid: "kenney-map-pyramid",
+  boulder: "kenney-map-boulder",
+  pineTall: "kenney-map-pine-tall",
+  pineDark: "kenney-map-pine-dark",
+  pineSnow: "kenney-map-pine-snow",
+  broadleaf: "kenney-map-broadleaf",
+} as const;
+const MAP_FILES: Record<keyof typeof MAP, string> = {
+  castle: "mapTile_100.png",
+  tower: "mapTile_099.png",
+  pyramid: "mapTile_050.png",
+  boulder: "mapTile_056.png",
+  pineTall: "mapTile_041.png",
+  pineDark: "mapTile_060.png",
+  pineSnow: "mapTile_110.png",
+  broadleaf: "mapTile_055.png",
+};
+
 /** How much larger than the ground the figures stand. */
-const SEAT_SCALE = SCALE * 1.7;
 const MAGE_SCALE = SCALE * 1.15;
 const GUARDIAN_SCALE = SCALE * 1.35;
 
@@ -57,6 +82,7 @@ export class WorldScene extends Phaser.Scene {
   private opts!: WorldData;
   private mage!: Phaser.GameObjects.Sprite;
   private target: { x: number; y: number } | null = null;
+  private walkBob: Phaser.Tweens.Tween | undefined;
   private lastSeat: string | null = null;
   private guardians: { kind: "serpent" | "drake"; sprite: Phaser.GameObjects.Image; at: { x: number; y: number }; stirred: boolean }[] = [];
   private scoutsRunning = false;
@@ -67,6 +93,20 @@ export class WorldScene extends Phaser.Scene {
 
   init(data: WorldData) {
     this.opts = data;
+  }
+
+  preload() {
+    this.load.spritesheet(SHEET.dungeon, "/assets/kenney/tiny-dungeon/tilemap_packed.png", {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
+    this.load.spritesheet(SHEET.town, "/assets/kenney/tiny-town/tilemap_packed.png", {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
+    for (const [name, file] of Object.entries(MAP_FILES) as [keyof typeof MAP, string][]) {
+      this.load.image(MAP[name], `/assets/kenney/map-pack/${file}`);
+    }
   }
 
   create() {
@@ -108,14 +148,33 @@ export class WorldScene extends Phaser.Scene {
         .setDepth(3);
     }
 
-    // The seats, standing over the map.
+    // The forest, one sprite per tree, depth-sorted so nearer trees overlap
+    // farther ones. Species follow the altitude bands the bake chose.
+    for (const t of chart.forest) {
+      const key = t.kind === "tall" ? MAP.pineTall : t.kind === "mid" ? MAP.pineDark : t.kind === "clump" ? MAP.pineSnow : MAP.broadleaf;
+      const scale = t.kind === "tall" ? 0.5 : t.kind === "clump" ? 0.55 : 0.42;
+      this.add
+        .image(t.x * SCALE, t.y * SCALE, key)
+        .setOrigin(0.5, 0.94)
+        .setScale(scale)
+        .setDepth(1 + t.y / chart.height);
+    }
+    // Boulders on the hills.
+    for (const r of chart.relief) {
+      this.add
+        .image(r.x * SCALE, r.y * SCALE, MAP.boulder)
+        .setOrigin(0.5, 0.92)
+        .setScale(0.45)
+        .setDepth(1 + r.y / chart.height);
+    }
+
+    // The seats, standing over the map: castle, pyramid or tower by share.
     for (const seat of chart.seats) {
-      const sprite = seatFor(seat.share);
-      const key = sprite === SEAT_ZIGGURAT ? KEYS.ziggurat : sprite === SEAT_TEMPLE ? KEYS.temple : KEYS.tower;
+      const key = seat.share > 0.34 ? MAP.castle : seat.share > 0.15 ? MAP.pyramid : MAP.tower;
       const img = this.add
         .image(seat.at.x * SCALE, seat.at.y * SCALE + SCALE * 2, key)
-        .setOrigin(0.5, 1)
-        .setScale(SEAT_SCALE)
+        .setOrigin(0.5, 0.95)
+        .setScale(seat.share > 0.34 ? 2.6 : 2.1)
         .setDepth(6);
       img.enableFilters();
       img.filters?.internal.addGlow(T.ley, 3, 0, 1);
@@ -142,14 +201,8 @@ export class WorldScene extends Phaser.Scene {
     this.placeGuardians();
 
     /* ── the mage ──────────────────────────────────────────────────── */
-    this.anims.create({
-      key: "mage-walk",
-      frames: [{ key: KEYS.mage0 }, { key: KEYS.mage1 }],
-      frameRate: 6,
-      repeat: -1,
-    });
     this.mage = this.add
-      .sprite(this.opts.start.x * SCALE, this.opts.start.y * SCALE, KEYS.mage0)
+      .sprite(this.opts.start.x * SCALE, this.opts.start.y * SCALE, SHEET.dungeon, FRAME.mage)
       .setOrigin(0.5, 1)
       .setScale(MAGE_SCALE)
       .setDepth(10);
@@ -182,7 +235,6 @@ export class WorldScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, worldW, worldH);
     cam.startFollow(this.mage, true, 0.08, 0.08);
-    cam.fadeIn(500);
   }
 
   /* ── walking ─────────────────────────────────────────────────────── */
@@ -208,7 +260,17 @@ export class WorldScene extends Phaser.Scene {
 
     this.tweens.killTweensOf(this.mage);
     this.mage.setFlipX(tx < this.mage.x);
-    this.mage.play("mage-walk", true);
+    // The pack has no walk cycle, so walking is a bob: enough for a figure
+    // this size to read as moving, and it stops dead on arrival.
+    this.walkBob?.destroy();
+    this.walkBob = this.tweens.add({
+      targets: this.mage,
+      scaleY: MAGE_SCALE * 0.92,
+      duration: 140,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.InOut",
+    });
     this.tweens.add({
       targets: this.mage,
       x: tx,
@@ -218,8 +280,9 @@ export class WorldScene extends Phaser.Scene {
       onComplete: () => {
         if (this.target !== target) return;
         this.target = null;
-        this.mage.stop();
-        this.mage.setTexture(KEYS.mage0);
+        this.walkBob?.destroy();
+        this.walkBob = undefined;
+        this.mage.setScale(MAGE_SCALE);
         this.arrive(target.x, target.y);
       },
     });
@@ -285,21 +348,21 @@ export class WorldScene extends Phaser.Scene {
       const shore = seek(Math.floor(W / 2), -1);
       if (shore !== null) {
         const x = Math.max(12, shore - 14);
-        this.spawnGuardian("serpent", KEYS.serpent, x, row);
+        this.spawnGuardian("serpent", FRAME.serpent, x, row);
       }
     }
     if (this.opts.pumpBinder) {
       const shore = seek(Math.floor(W / 2), 1);
       if (shore !== null) {
         const x = Math.min(W - 12, shore + 10);
-        this.spawnGuardian("drake", KEYS.drake, x, row - 6);
+        this.spawnGuardian("drake", FRAME.beast, x, row - 6);
       }
     }
   }
 
-  private spawnGuardian(kind: "serpent" | "drake", key: string, cx: number, cy: number) {
+  private spawnGuardian(kind: "serpent" | "drake", frame: number, cx: number, cy: number) {
     const sprite = this.add
-      .image(cx * SCALE, cy * SCALE, key)
+      .image(cx * SCALE, cy * SCALE, SHEET.dungeon, frame)
       .setOrigin(0.5, 1)
       .setScale(GUARDIAN_SCALE)
       .setAlpha(0.6)
@@ -410,15 +473,9 @@ export class WorldScene extends Phaser.Scene {
       this.textures.remove(KEYS.terrain);
       this.textures.addCanvas(KEYS.terrain, this.opts.chart.canvas);
     }
-    this.bakeSprite(KEYS.mage0, MAGE_WALK[0]!);
-    this.bakeSprite(KEYS.mage1, MAGE_WALK[1]!);
     this.bakeSprite(KEYS.scout, SCOUT);
     this.bakeSprite(KEYS.lost, SCOUT_LOST);
-    this.bakeSprite(KEYS.serpent, SERPENT_COILS);
-    this.bakeSprite(KEYS.drake, DRAKE_ROOST);
-    this.bakeSprite(KEYS.ziggurat, SEAT_ZIGGURAT);
-    this.bakeSprite(KEYS.temple, SEAT_TEMPLE);
-    this.bakeSprite(KEYS.tower, SEAT_TOWER);
+
 
     if (!this.textures.exists(KEYS.mote)) {
       const size = 8;

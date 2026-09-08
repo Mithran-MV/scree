@@ -2,6 +2,13 @@ import type { Raster } from "../field/raster";
 import { extractFeatures } from "../field/features";
 import { findLandmarks } from "../world/landmarks";
 import {
+  CONIFER_CLUMP,
+  CONIFER_LOW,
+  CONIFER_MID,
+  CONIFER_TALL,
+  HILL,
+} from "../arcane/terrain-sprites";
+import {
   blit,
   chartSizeFor,
   citadelFor,
@@ -31,6 +38,10 @@ export interface BakedChart {
   /** Seat plaque anchors, in chart pixels. */
   seats: { id: string; share: number; at: Node }[];
   pass: Node | null;
+  /** Hills, in chart pixels, for the world to stand boulder sprites on. */
+  relief: { kind: "hill"; x: number; y: number }[];
+  /** The forest, in chart pixels, drawn by the world as tree sprites. */
+  forest: { kind: "tall" | "mid" | "low" | "clump"; x: number; y: number }[];
   /** True where a chart pixel is underwater, so the world knows where you drown. */
   wet: Uint8Array;
   /** Elevation per chart pixel. */
@@ -95,8 +106,32 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
   if (wardAt) keepOut.push({ sprite: WARD_CIRCLE, x: wardAt.x, y: wardAt.y });
 
   // Canopy first, then the landmarks that stand out of it, then the seats.
-  drawFurniture(ctx, placeForest(field));
-  drawFurniture(ctx, placeFurniture(field, keepOut));
+  // The massifs are baked: the packs carry no true mountain tile, and the
+  // ranked peaks read as a range where a rock tile reads as a block. The
+  // forest and the hills are handed to the world to stand real sprites on.
+  const foot = (item: Placed) => ({
+    x: item.x + ((item.sprite.art[0]?.length ?? 0) >> 1),
+    y: item.y + item.sprite.art.length,
+  });
+  const forest: BakedChart["forest"] = placeForest(field).map((item) => ({
+    kind:
+      item.sprite === CONIFER_TALL ? "tall"
+      : item.sprite === CONIFER_MID ? "mid"
+      : item.sprite === CONIFER_CLUMP ? "clump"
+      : "low",
+    ...foot(item),
+  }));
+  const furniture = placeFurniture(field, keepOut);
+  const relief: BakedChart["relief"] = [];
+  const baked: Placed[] = [];
+  let hills = 0;
+  for (const item of furniture) {
+    // Every sixth hill gets a boulder sprite; the rest stay baked. Standing a
+    // rock on every hill turned the mid-band into a wall of grey.
+    if (item.sprite === HILL && hills++ % 6 === 0) relief.push({ kind: "hill", ...foot(item) });
+    else baked.push(item);
+  }
+  drawFurniture(ctx, baked);
   // The seats themselves are not baked: the world draws each as its own sprite
   // at nearly twice the ground scale, so they stand over the map rather than in it.
   if (wardAt) blit(ctx, WARD_CIRCLE, wardAt.x, wardAt.y);
@@ -136,6 +171,8 @@ export function bakeChart(raster: Raster, aspect: number): BakedChart {
       at: nodes[i] ?? toChart(mark.col, mark.row),
     })),
     pass,
+    relief,
+    forest,
     wet: field.wet,
     z: field.z,
   };
