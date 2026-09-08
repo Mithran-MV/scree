@@ -209,7 +209,7 @@ export interface Placed {
 export function placeFurniture(field: ChartField, keepOut: Placed[]): Placed[] {
   const { width: W, height: H } = field;
   const placed: Placed[] = [];
-  const step = 11;
+  const step = 15;
 
   const clash = (x: number, y: number, w: number, h: number) =>
     [...keepOut, ...placed].some(
@@ -223,7 +223,7 @@ export function placeFurniture(field: ChartField, keepOut: Placed[]): Placed[] {
   for (let gy = 3; gy < H - 10; gy += step) {
     for (let gx = 3; gx < W - 13; gx += step) {
       const roll = hash(gx, gy, 1);
-      if (roll > 0.86) continue;
+      if (roll > 0.9) continue;
 
       const x = gx + Math.floor(hash(gx, gy, 2) * (step - 2));
       const y = gy + Math.floor(hash(gx, gy, 3) * (step - 2));

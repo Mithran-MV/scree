@@ -18,29 +18,34 @@ const LAND: Palette = {
   G: "#ffe9a8", // gilt lit
 };
 
+/** A ranked massif: three summits, the way an old map draws a range. */
 export const PEAK_LARGE: Sprite = {
   palette: LAND,
   art: [
-    "......s......",
-    ".....sls.....",
-    "....llsdd....",
-    "...lllmddd...",
-    "..lllmmdddd..",
-    ".llllmmddddd.",
-    "llllmmmdddddd",
-    "kkkkkkkkkkkkk",
+    "..........s..........",
+    ".........sss.........",
+    "....s....slsd........",
+    "...sss..slllmdd......",
+    "..slsd.sllllmmddd....",
+    ".sllmd.llllmmmdddd..s",
+    "sllmmddlllmmmddddd.sss",
+    "llmmdddllmmmdddddd.slsd",
+    "lmmddddlmmmddddddd.llmd",
+    "lmmdddddmmmdddddddllmmd",
+    "kkkkkkkkkkkkkkkkkkkkkkk",
   ],
 };
 
 export const PEAK_MID: Sprite = {
   palette: LAND,
   art: [
-    "....s....",
-    "...lsd...",
-    "..llmdd..",
-    ".lllmddd.",
-    "llllmdddd",
-    "kkkkkkkkk",
+    ".....s.......",
+    "....sls......",
+    "...llsdd..s..",
+    "..lllmddd.ss.",
+    ".lllmmdddslsd",
+    "llllmmddddlmd",
+    "kkkkkkkkkkkkk",
   ],
 };
 
@@ -51,22 +56,25 @@ export const PEAK_SMALL: Sprite = {
 
 export const HILL: Sprite = {
   palette: LAND,
-  art: ["..mmm..", ".mmmdd.", "mmmdddd", "kkkkkkk"],
+  art: ["...lll...", "..lmmmdd.", ".lmmmdddd", "lmmmddddd", "kkkkkkkkk"],
 };
 
 /** A stepped pyramid: the largest holding on a territory. */
 export const ZIGGURAT: Sprite = {
   palette: LAND,
   art: [
-    "......G......",
-    "......g......",
-    ".....ggg.....",
-    "....gGGgg....",
-    "...ggGGggg...",
-    "..gggGGgggg..",
-    ".ggggGGggggg.",
-    "gggggGGgggggg",
-    "kkkkkkkkkkkkk",
+    ".........G.........",
+    ".........g.........",
+    "........ggg........",
+    ".......ggGgg.......",
+    "......gggGggg......",
+    ".....ggGgGgGgg.....",
+    "....gggggGggggg....",
+    "...ggGggGGGggGgg...",
+    "..gggggggGggggggg..",
+    ".ggGgggggGgggggGgg.",
+    "gggggggggGggggggggg",
+    "kkkkkkkkkkkkkkkkkkk",
   ],
 };
 
@@ -74,14 +82,17 @@ export const ZIGGURAT: Sprite = {
 export const TEMPLE: Sprite = {
   palette: LAND,
   art: [
-    "...ggggg...",
-    "..ggGGGgg..",
-    ".ggggggggg.",
-    "g.g.g.g.g.g",
-    "g.g.g.g.g.g",
-    "g.g.g.g.g.g",
-    "ggggggggggg",
-    "kkkkkkkkkkk",
+    "......G......",
+    ".....ggg.....",
+    "...ggGGGgg...",
+    "..ggggggggg..",
+    ".ggggggggggg.",
+    "gg.g.g.g.g.gg",
+    "gg.g.g.g.g.gg",
+    "gg.g.g.g.g.gg",
+    "gg.g.g.g.g.gg",
+    "ggggggggggggg",
+    "kkkkkkkkkkkkk",
   ],
 };
 
@@ -89,15 +100,17 @@ export const TEMPLE: Sprite = {
 export const TOWER: Sprite = {
   palette: LAND,
   art: [
-    "..G..",
-    ".ggg.",
-    ".gGg.",
-    ".ggg.",
-    ".gGg.",
-    ".ggg.",
-    ".gGg.",
-    "ggggg",
-    "kkkkk",
+    "....G....",
+    "...ggg...",
+    "..ggggg..",
+    "...gGg...",
+    "...ggg...",
+    "...gGg...",
+    "...ggg...",
+    "..ggGgg..",
+    ".ggggggg.",
+    "ggg.g.ggg",
+    "kkkkkkkkk",
   ],
 };
 
@@ -109,7 +122,7 @@ export const OBELISK: Sprite = {
 /** A minor holding, scattered across the flanks of a territory. */
 export const HOLDING: Sprite = {
   palette: LAND,
-  art: ["..g..", ".ggg.", "ggggg", "kkkkk"],
+  art: ["..G..", ".ggg.", ".ggg.", "ggggg", "gg.gg", "kkkkk"],
 };
 
 const DROWNED: Palette = {
