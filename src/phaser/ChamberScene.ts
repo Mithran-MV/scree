@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { T, FONT_MONO } from "./theme";
-import { bezel, button, hex, label, panel, plaque, runeStrip } from "./chrome";
+import { bezel, button, hex, label, panel, plaque, runeStrip, vellumPanel } from "./chrome";
 import type { BakedChart } from "./bakeChart";
 
 export interface FeedRow {
@@ -23,6 +23,8 @@ export interface ChamberData {
   feed: FeedRow[];
   fluxCurve: { t: number; price: number }[];
   fluxNote: string;
+  /** Liquidation density per price band, 0..1, west to east. */
+  heat: number[];
   error?: string | null;
   onSurvey?: () => void;
   onReference?: () => void;
@@ -361,17 +363,22 @@ export class ChamberScene extends Phaser.Scene {
     const { x, y, w, h } = this.screen;
     const { chart } = this.opts;
 
-    // Title card, pinned inside the screen's north-west corner.
-    const card = panel(this, x + 14, y + 14, 250, 84, { fill: T.screenDeep, fillAlpha: 0.94, edge: T.leyDim });
-    const t1 = label(this, x + 26, y + 24, this.opts.title, { size: 12, color: T.leyBright });
-    const t2 = label(this, x + 26, y + 42, this.opts.blurb, { size: 10.5, color: T.inkDim });
-    t2.setWordWrapWidth(226);
-    const t3 = label(this, x + 26, y + 80, this.opts.placeName.toUpperCase(), {
-      size: 9.5,
-      color: T.ley,
+    // Title card, pinned inside the screen's north-west corner, on vellum.
+    const card = vellumPanel(this, x + 14, y + 14, 252, 88);
+    const t0 = label(this, x + 28, y + 22, "PLACE NAME · DESCRIPTION", {
+      size: 8,
+      color: T.vellumInkDim,
+      tracking: 1.4,
+    });
+    const t1 = label(this, x + 28, y + 34, this.opts.title, { size: 12, color: T.vellumInk });
+    const t2 = label(this, x + 28, y + 52, this.opts.blurb, { size: 10, color: T.vellumInkDim });
+    t2.setWordWrapWidth(222);
+    const t3 = label(this, x + 28, y + 88, this.opts.placeName.toUpperCase(), {
+      size: 9,
+      color: T.vellumInk,
       tracking: 2,
     });
-    this.layer.add([card, t1, t2, t3]);
+    this.layer.add([card, t0, t1, t2, t3]);
 
     // Actions, north-east.
     this.layer.add(
@@ -408,20 +415,70 @@ export class ChamberScene extends Phaser.Scene {
       );
     }
 
-    this.drawFlux(x + 16, y + h - 132, 208, 108);
+    this.drawFlux(x + 16, y + h - 148, 212, 112);
+    this.drawHeat(x + w - 96, y + 116, 84, Math.max(80, h - 200));
+  }
+
+  /**
+   * The liquidation ledger, banded by price.
+   *
+   * One cell per price band and dwell row: red where that point on the chart is
+   * already underwater, cold where it is safe. It is the same field the terrain
+   * is cut from, read as a table instead of as country — so a viewer who
+   * distrusts the landscape can check it against squares.
+   */
+  private drawHeat(hx: number, hy: number, hw: number, hh: number) {
+    const heat = this.opts.heat;
+    if (heat.length === 0) return;
+
+    const cols = 6;
+    const rows = Math.min(heat.length, Math.floor(hh / 11));
+    const cw = hw / cols;
+    const ch = hh / rows;
+
+    const g = this.add.graphics().setDepth(7);
+    for (let r = 0; r < rows; r++) {
+      const share = heat[Math.floor((r / rows) * heat.length)] ?? 0;
+      for (let c = 0; c < cols; c++) {
+        // Cells fill from the left as the band gets more dangerous, so the
+        // block reads as a bar chart as well as a heat map.
+        const lit = c / cols < share;
+        const tone = !lit ? T.screenMid : share > 0.66 ? T.peril : share > 0.33 ? T.brass : T.ley;
+        g.fillStyle(tone, lit ? 0.85 : 0.28);
+        g.fillRect(hx + c * cw + 1, hy + r * ch + 1, cw - 2, ch - 2);
+      }
+    }
+    g.lineStyle(1, T.leyDim, 0.5);
+    g.strokeRect(hx, hy, hw, hh);
+    this.layer.add(g);
+    this.layer.add(
+      label(this, hx, hy - 13, "DROWNED BY BAND", {
+        size: 8,
+        color: T.inkDim,
+        tracking: 1.2,
+      }).setDepth(7),
+    );
   }
 
   /** The Aether-Flux Matrix: crash liquidation price against dwell. */
   private drawFlux(fx: number, fy: number, fw: number, fh: number) {
     const curve = this.opts.fluxCurve;
-    const box = panel(this, fx, fy, fw, fh, { fill: T.screenDeep, fillAlpha: 0.95, edge: T.leyDim });
-    this.layer.add(box);
+    this.layer.add(vellumPanel(this, fx, fy, fw, fh));
     this.layer.add(
-      label(this, fx + 12, fy + 9, "AETHER-FLUX MATRIX", { size: 9, color: T.ley, tracking: 1.6 }),
+      label(this, fx + 14, fy + 9, "AETHER-FLUX MATRIX", {
+        size: 9,
+        color: T.vellumInk,
+        tracking: 1.4,
+      }),
     );
 
     if (curve.length < 2) {
-      this.layer.add(label(this, fx + 12, fy + 30, "no crash edge on this book", { size: 9.5, color: T.inkDim }));
+      this.layer.add(
+        label(this, fx + 14, fy + 30, "no crash edge on this book", {
+          size: 9.5,
+          color: T.vellumInkDim,
+        }),
+      );
       return;
     }
 
@@ -435,14 +492,16 @@ export class ChamberScene extends Phaser.Scene {
     const plotH = fh - 56;
 
     const g = this.add.graphics();
-    g.lineStyle(1, T.leyDim, 0.28);
+    g.fillStyle(0xffffff, 0.35);
+    g.fillRect(plotX, plotY, plotW, plotH);
+    g.lineStyle(1, T.vellumEdge, 0.4);
     for (const f of [0, 0.5, 1]) {
       g.beginPath();
       g.moveTo(plotX, plotY + plotH * f);
       g.lineTo(plotX + plotW, plotY + plotH * f);
       g.strokePath();
     }
-    g.lineStyle(1.6, T.leyBright, 0.95);
+    g.lineStyle(1.6, T.vellumInk, 0.9);
     g.beginPath();
     curve.forEach((c, i) => {
       const px = plotX + (c.t / 30) * plotW;
@@ -453,11 +512,17 @@ export class ChamberScene extends Phaser.Scene {
     g.strokePath();
     this.layer.add(g);
 
-    this.layer.add(label(this, plotX, plotY + plotH + 5, "0h", { size: 8.5, color: T.inkDim }));
+    this.layer.add(label(this, plotX, plotY + plotH + 4, "0h", { size: 8, color: T.vellumInkDim }));
     this.layer.add(
-      label(this, plotX + plotW, plotY + plotH + 5, "30d", { size: 8.5, color: T.inkDim, align: "right" }),
+      label(this, plotX + plotW, plotY + plotH + 4, "30d", {
+        size: 8,
+        color: T.vellumInkDim,
+        align: "right",
+      }),
     );
-    this.layer.add(label(this, fx + 12, fy + fh - 15, this.opts.fluxNote, { size: 9, color: T.inkDim }));
+    this.layer.add(
+      label(this, fx + 14, fy + fh - 15, this.opts.fluxNote, { size: 9, color: T.vellumInk }),
+    );
   }
 
   /* ── the feed ─────────────────────────────────────────────────────── */

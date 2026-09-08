@@ -94,6 +94,32 @@ export function PhaserChamber(props: Props) {
     return `drifts ${drift.toFixed(2)}% over 30 days`;
   }, [fluxCurve]);
 
+  /**
+   * How much of each price band is underwater, west to east. Read straight off
+   * the raster, so the ledger and the terrain can never disagree.
+   */
+  const heat = useMemo(() => {
+    const { width, height } = raster.window;
+    const bands = 24;
+    const out: number[] = [];
+    for (let b = 0; b < bands; b++) {
+      const from = Math.floor((b / bands) * width);
+      const to = Math.max(from + 1, Math.floor(((b + 1) / bands) * width));
+      let wet = 0;
+      let seen = 0;
+      for (let col = from; col < to; col++) {
+        for (let row = 0; row < height; row += 4) {
+          const z = raster.z[row * width + col]!;
+          if (!Number.isFinite(z)) continue;
+          seen++;
+          if (z < 0) wet++;
+        }
+      }
+      out.push(seen === 0 ? 0 : wet / seen);
+    }
+    return out;
+  }, [raster]);
+
   const feed: FeedRow[] = useMemo(
     () => [
       { key: "ETH", value: usd(spot) },
@@ -144,6 +170,7 @@ export function PhaserChamber(props: Props) {
         feed,
         fluxCurve,
         fluxNote,
+        heat,
         error: props.error,
         onSurvey: props.onSurvey,
         onReference: props.onReference,
@@ -174,7 +201,7 @@ export function PhaserChamber(props: Props) {
       gameRef.current = null;
       game?.destroy(true);
     };
-  }, [raster, win, aspect, spot, shape, feed, fluxCurve, fluxNote, baskets, props]);
+  }, [raster, win, aspect, spot, shape, feed, fluxCurve, fluxNote, heat, baskets, props]);
 
   return (
     <div className="chamber" ref={hostRef}>
