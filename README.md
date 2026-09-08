@@ -20,6 +20,29 @@ High ground is safe. The coastline is where you die. The dashed line is a
 a different one. No dashboard shows you that line, because a dashboard has one
 row per protocol and nowhere to put the boundary between them.
 
+## How the ground is drawn
+
+The map is a Phaser 4 game in two scenes. `WorldScene` (`src/game/WorldScene.ts`)
+owns the camera and everything standing on the ground; `UIScene` is launched
+over it and owns the instrument: bezel, title plate, live feed, terrace-depth
+chart and the hover box. The world raises events; the interface listens. Neither
+scene does arithmetic — the page hands them a terrain grid and a `readAt`
+function built from the kernel.
+
+The grid comes from `src/game/terrain.ts`. Elevation is sampled at tile
+corners and banded (water, coast, grass, highland, mountain). Each tile records
+the lowest band among its four corners and a 4-bit mask of the corners that rise
+above it, so every tile shows exactly one transition and neighbouring tiles
+agree along the corner they share. `src/game/tileset.ts` paints the transition
+tiles from colours sampled off the Kenney sheet; interiors, trees, seats and
+the surveyor's position are all rules of the data, never scattered.
+
+Layers, bottom to top: animated water; terrain with coastlines and territory
+lines; terraces, a castle-wall platform over the price × dwell band you propose
+to defend; then trees, one seat per territory, the two guardians and the
+surveyor standing at today's price. Hover the ground and the box names the
+deployment that owns it and the price at which it liquidates you at that dwell.
+
 ## Why the ground has shape
 
 Each position moves with price in one direction only. Supply ETH and borrow
