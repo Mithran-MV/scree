@@ -188,7 +188,7 @@ a { color: var(--accent); }
 
 
 /* ══════════════════════════════════════════════════════════════════════
-   The expedition.
+   The survey.
 
    Journal on the west, world on the east. The journal is DOM because it is
    text, scroll and a real input; the world is Phaser because it moves.
@@ -222,16 +222,16 @@ html, body {
 
 .stage { position: fixed; inset: 0; overflow: hidden; }
 
-.expedition { position: absolute; inset: 0; }
+.scree { position: absolute; inset: 0; }
 .world-host { position: absolute; inset: 0; background: var(--void); }
 .world-host canvas { display: block; }
 
 /* The address field: a real input laid over the slot the dashboard draws. */
 .address-slot {
   position: absolute;
-  left: 26px;
-  top: 94px;
-  width: 218px;
+  right: 90px;
+  top: 26px;
+  width: 190px;
   height: 22px;
   z-index: 3;
   padding: 0 6px;
