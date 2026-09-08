@@ -99,6 +99,10 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover, onPlate }: Prop
     for (const line of contourSet(raster, interval, ceiling)) {
       const isShore = line.level === 0;
       const isIndex = !isShore && Math.abs(Math.round(line.level / interval)) % 5 === 0;
+      // Underwater is one fact, already dead, and it carries its own level
+      // ruling. Cutting every bathymetric interval there buries the ruling in
+      // lines that no reader would ever act on, so only the index survives.
+      if (line.level < 0 && !isIndex) continue;
       const reg = isShore
         ? REGISTERS.shore
         : line.level < 0
@@ -167,14 +171,22 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover, onPlate }: Prop
       ctx.closePath();
       ctx.stroke();
 
+      // The glyph never appears without its numbers. A bare mark asserts a
+      // feature; a mark carrying its own reading can be checked.
       const spec = TYPE.passReadout!;
-      ctx.font = `${spec.size}px var(--mono), ui-monospace, monospace`;
-      ctx.fillStyle = css(spec.color, 1);
-      ctx.textAlign = "center";
       const label = `THE PASS  z ${p.elevation >= 0 ? "+" : ""}${p.elevation.toFixed(4)}`;
       const sub = `$${Math.round(p.price).toLocaleString("en-US")} · held ${fmtDays(p.dwellDays)}`;
-      ctx.fillText(label, clampX(px, SIZE), Math.max(spec.size + 2, py - 12));
-      ctx.fillText(sub, clampX(px, SIZE), Math.max(spec.size * 2 + 4, py - 12 + spec.size + 2));
+      ctx.font = `${spec.size}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+      ctx.textAlign = "center";
+      const cx = clampX(px, SIZE);
+      const wide = Math.max(ctx.measureText(label).width, ctx.measureText(sub).width);
+      const top = py < SIZE / 2 ? py + 14 : py - 14 - spec.size * 2 - 8;
+      // A knockout under the type, so a measurement is never read through ink.
+      ctx.fillStyle = css(SHEET.knockout, 0.88);
+      ctx.fillRect(cx - wide / 2 - 5, top - 2, wide + 10, spec.size * 2 + 10);
+      ctx.fillStyle = css(spec.color, 1);
+      ctx.fillText(label, cx, top + spec.size);
+      ctx.fillText(sub, cx, top + spec.size * 2 + 3);
       ctx.textAlign = "start";
     }
 
