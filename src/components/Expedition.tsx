@@ -10,7 +10,11 @@ import { extractFeatures } from "@/field/features";
 import { walkPaths } from "@/sim/paths";
 import { bakeChart, type BakedChart } from "@/phaser/bakeChart";
 import type { WorldScene, ScoutPath } from "@/phaser/WorldScene";
-import { Journal, type Entry, type FeedRow } from "./Journal";
+import type { HudScene, HudEntry, HudFeedRow } from "@/phaser/HudScene";
+import { PANEL_W } from "@/phaser/HudScene";
+
+type Entry = HudEntry;
+type FeedRow = HudFeedRow;
 
 interface Props {
   baskets: Basket[];
@@ -36,6 +40,7 @@ export function Expedition(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<WorldScene | null>(null);
+  const hudRef = useRef<HudScene | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [scoutsBusy, setScoutsBusy] = useState(false);
   const nextId = useRef(1);
@@ -112,10 +117,21 @@ export function Expedition(props: Props) {
     (async () => {
       const PhaserLib = (await import("phaser")).default;
       const { WorldScene } = await import("@/phaser/WorldScene");
+      const { HudScene } = await import("@/phaser/HudScene");
       if (cancelled) return;
 
+      // Phaser draws text with canvas fonts, so the faces the page loaded are
+      // handed over by name rather than by CSS variable.
+      const cssVar = (name: string, fallback: string) =>
+        getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+      const fonts = {
+        mono: cssVar("--font-mono", "ui-monospace, Menlo, monospace"),
+        serif: cssVar("--font-body", "Georgia, serif"),
+        display: cssVar("--font-display", "Georgia, serif"),
+      };
+
       const rect = host.getBoundingClientRect();
-      const chart = bakeChart(raster, Math.max(1.4, rect.width / Math.max(1, rect.height)));
+      const chart = bakeChart(raster, Math.max(1.4, (rect.width - PANEL_W) / Math.max(1, rect.height)));
       chartRef.current = chart;
 
       const startCol = colOfPrice(win, spot);
@@ -188,8 +204,19 @@ export function Expedition(props: Props) {
         },
       });
 
+      const hud = new HudScene();
+      game.scene.add("hud", hud, true, {
+        fonts,
+        onSurvey: () => propsRef.current.onSurvey(),
+        onConnect: () => propsRef.current.onConnect(),
+        onReference: () => propsRef.current.onReference(),
+        onScouts: () => sendScoutsRef.current(),
+        onPlate: () => propsRef.current.onPlate(),
+      });
+
       gameRef.current = game;
       sceneRef.current = scene;
+      hudRef.current = hud;
       // Expose the game on its host element so tooling and tests can drive
       // the loop directly, without reaching into React.
       (host as unknown as { __game?: Phaser.Game }).__game = game;
@@ -198,10 +225,29 @@ export function Expedition(props: Props) {
     return () => {
       cancelled = true;
       sceneRef.current = null;
+      hudRef.current = null;
       gameRef.current = null;
       game?.destroy(true);
     };
   }, [raster, win, spot, baskets, br, fromChart, log]);
+
+  // Callbacks reach the hud through refs, so a re-render never rebuilds the game.
+  const propsRef = useRef(props);
+  propsRef.current = props;
+  const sendScoutsRef = useRef<() => void>(() => {});
+
+  // Everything the dashboard shows is pushed in; the hud redraws on change.
+  useEffect(() => {
+    hudRef.current?.setState({
+      label: props.label,
+      busy: props.busy,
+      error: props.error,
+      wallet: props.wallet,
+      scoutsBusy,
+      feed,
+      entries,
+    });
+  }, [props.label, props.busy, props.error, props.wallet, scoutsBusy, feed, entries]);
 
   /* ── scouts ───────────────────────────────────────────────────── */
 
@@ -226,26 +272,22 @@ export function Expedition(props: Props) {
     log("note", "Scouts sent", "Two hundred walk the price paths the simulation drew. Watch who comes home.");
     scene.sendScouts(paths);
   }, [baskets, spot, scoutsBusy, toChart, log]);
+  sendScoutsRef.current = sendScouts;
 
   return (
     <div className="expedition">
-      <Journal
-        label={props.label}
-        address={props.address}
-        busy={props.busy}
-        error={props.error}
-        feed={feed}
-        entries={entries}
-        scoutsBusy={scoutsBusy}
-        onAddress={props.onAddress}
-        onSurvey={props.onSurvey}
-        onConnect={props.onConnect}
-        wallet={props.wallet}
-        onReference={props.onReference}
-        onScouts={sendScouts}
-        onPlate={props.onPlate}
-      />
       <div className="world-host" ref={hostRef} />
+      {/* The one control that stays in the DOM: a real text input, so paste,
+          autofill and screen readers keep working. It sits on the slot the
+          dashboard draws for it. */}
+      <input
+        className="address-slot"
+        value={props.address}
+        onChange={(e) => props.onAddress(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && !props.busy && props.onSurvey()}
+        placeholder={props.busy ? "reading…" : "0x… paste an address"}
+        spellCheck={false}
+      />
     </div>
   );
 }

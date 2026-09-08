@@ -115,6 +115,11 @@ export function label(
     align: options.align ?? "left",
   });
   t.setAlpha(options.alpha ?? 1);
+  // The game runs with pixelArt on, which is right for the sprites and wrong
+  // for type: text canvases would be sampled nearest-neighbour at 1x. Render
+  // them at device resolution and filter them linearly.
+  t.setResolution(Math.min(2, window.devicePixelRatio || 1));
+  t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
   if (options.tracking) t.setLetterSpacing(options.tracking);
   if (options.align === "center") t.setOrigin(0.5, 0);
   if (options.align === "right") t.setOrigin(1, 0);
@@ -235,10 +240,9 @@ export function button(
   const container = scene.add.container(x, y, [g, t]);
   container.setSize(w, h);
   if (enabled) {
-    container.setInteractive(
-      new Phaser.Geom.Rectangle(w / 2, h / 2, w, h),
-      Phaser.Geom.Rectangle.Contains,
-    );
+    // The hit area is in the container's local space, whose origin is the
+    // button's top-left corner: Rectangle takes a corner, not a centre.
+    container.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
     container.on("pointerover", () => {
       paint(true);
       scene.input.setDefaultCursor("pointer");

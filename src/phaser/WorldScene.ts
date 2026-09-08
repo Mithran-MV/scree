@@ -3,6 +3,7 @@ import type { Sprite } from "../arcane/figures";
 import type { BakedChart } from "./bakeChart";
 import { SCOUT, SCOUT_LOST } from "./figures";
 import { SEATS, buildGround, seatKindFor, treeFrame } from "./ground";
+import { PANEL_W } from "./HudScene";
 import { T } from "./theme";
 import { hex } from "./chrome";
 
@@ -213,17 +214,22 @@ export class WorldScene extends Phaser.Scene {
 
     /* ── input ─────────────────────────────────────────────────────── */
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      if (pointer.rightButtonDown()) return;
+      if (pointer.rightButtonDown() || pointer.x < PANEL_W) return;
       const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       this.walkTo(world.x / SCALE, world.y / SCALE);
     });
 
-    this.input.on("wheel", (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+    this.input.on("wheel", (pointer: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
+      if (pointer.x < PANEL_W) return;
       const cam = this.cameras.main;
       cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.12), 0.55, 3));
     });
 
     const cam = this.cameras.main;
+    // The dashboard owns the west of the screen; the world shows to its right.
+    const fit = () => cam.setViewport(PANEL_W, 0, Math.max(1, this.scale.width - PANEL_W), this.scale.height);
+    fit();
+    this.scale.on("resize", fit, this);
     cam.setBounds(0, 0, worldW, worldH);
     cam.startFollow(this.mage, true, 0.08, 0.08);
   }
