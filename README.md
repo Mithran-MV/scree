@@ -112,10 +112,11 @@ Scree reads public positions. It does not request a token approval, hold a key,
 or move anyone's funds. Where a defence policy is armed, the system returns an
 action and a size; executing it stays the owner's own transaction.
 
-## Licence
-
-MIT. See [LICENSE](LICENSE).
 
 ## Assets
 
 The world is dressed in [Kenney](https://kenney.nl)'s **Tiny Town**, **Tiny Dungeon** and **Map Pack**, all released under Creative Commons Zero (public domain). The sheets and tiles in use live under `public/assets/kenney/` with each pack's licence file beside them. Every mark on the chart is still placed from the measured field — the packs supply the look, not the geometry.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
