@@ -33,6 +33,18 @@ export function windowAt(spot: number, overrides: Partial<Window> = {}): Window 
   return { ...DEFAULT_WINDOW, spot, ...overrides };
 }
 
+/**
+ * The one window both the picture and the geometry gate are measured on.
+ *
+ * These used to differ — the canvas rendered at 320x320 while the gate counted
+ * folds and basins at 256x256 — which meant the numbers printed beside the map
+ * were measured on a different grid from the map. Any feature that survives one
+ * resolution and not the other would have gone unnoticed. Both now come here.
+ */
+export function renderWindow(spot: number): Window {
+  return windowAt(spot);
+}
+
 /** Column index to price. Log-spaced across the fractional bounds. */
 export function priceAt(w: Window, col: number): number {
   const lo = Math.log(w.spot * (1 + w.priceLow));
