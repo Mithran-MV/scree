@@ -190,23 +190,23 @@ a { color: var(--accent); }
 /* ══════════════════════════════════════════════════════════════════════
    The survey chamber.
 
-   A chart read at night by lamplight. The ground is ink, every reading is
-   light, and the instruments around it are brass. Nothing here is decorative
-   for its own sake: each frame holds a number the chart actually produced.
+   A chart pinned on the wall of a working room, read by lamplight. The ground
+   is ink and every reading is light; the brass around it holds instruments,
+   and each instrument shows a number the chart actually produced.
    ══════════════════════════════════════════════════════════════════════ */
 
 :root {
   --night: #050a18;
-  --night-2: #0a1330;
+  --wall: #0b1022;
   --ley: #e0b25a;
   --ley-bright: #ffe6a8;
-  --ley-dim: #8a7440;
   --hazard: #e2603a;
   --aether: #57d6e8;
   --vellum: #e8dcc0;
   --brass: #b08d4a;
-  --brass-dark: #6d5729;
-  --display: var(--font-display), "Cinzel", Georgia, serif;
+  --brass-lit: #e7c98a;
+  --brass-dark: #5d4a22;
+  --display: var(--font-display), Cinzel, Georgia, serif;
   --body: var(--font-body), "EB Garamond", Georgia, serif;
   --mono: var(--font-mono), ui-monospace, Menlo, monospace;
 }
@@ -223,116 +223,163 @@ html, body {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: radial-gradient(120% 90% at 50% 40%, #0d1938 0%, #050a18 78%);
+  background:
+    radial-gradient(120% 80% at 50% 0%, #16203f 0%, transparent 60%),
+    radial-gradient(90% 70% at 50% 100%, #14161f 0%, transparent 55%),
+    var(--wall);
 }
 
-.chart {
+/* faint arcane ruling across the whole wall */
+.stage::before {
+  content: "";
   position: absolute;
   inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 47px, rgba(176, 141, 74, 0.05) 47px 48px),
+    repeating-linear-gradient(90deg, transparent 0 47px, rgba(176, 141, 74, 0.05) 47px 48px);
 }
 
-.chart canvas {
-  display: block;
-  cursor: crosshair;
-}
-
-/* ── brass framing, used by every panel ────────────────────────────── */
+/* ── brass, used by every frame in the room ────────────────────────── */
 
 .brass {
   position: relative;
-  background: linear-gradient(170deg, rgba(16, 26, 54, 0.94), rgba(6, 11, 26, 0.96));
+  background: linear-gradient(170deg, rgba(16, 26, 54, 0.95), rgba(6, 11, 26, 0.97));
   border: 1px solid var(--brass-dark);
+  border-radius: 3px;
   box-shadow:
     inset 0 0 0 1px rgba(224, 178, 90, 0.16),
     inset 0 1px 0 rgba(255, 230, 168, 0.09),
-    0 10px 34px rgba(0, 0, 0, 0.55);
-  border-radius: 3px;
+    0 12px 38px rgba(0, 0, 0, 0.6);
 }
 
-/* Corner rivets, drawn rather than imaged. */
 .brass::before,
 .brass::after {
   content: "";
   position: absolute;
+  top: 5px;
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #e7c98a, var(--brass-dark));
+  background: radial-gradient(circle at 35% 35%, var(--brass-lit), var(--brass-dark));
   box-shadow: 0 0 5px rgba(224, 178, 90, 0.5);
 }
+.brass::before { left: 5px; }
+.brass::after { right: 5px; }
 
-.brass::before { top: 5px; left: 5px; }
-.brass::after { top: 5px; right: 5px; }
+/* ── the chart, framed on the wall ─────────────────────────────────── */
 
-.hud {
+.chart-frame {
   position: absolute;
-  z-index: 3;
+  top: 74px;
+  left: 30px;
+  right: 320px;
+  bottom: 214px;
+  padding: 12px;
+  border-radius: 4px;
+  background: linear-gradient(150deg, #7a6330, #3d3116 42%, #6d5729 78%, #2e2411);
+  box-shadow:
+    0 0 0 1px #241c0c,
+    inset 0 0 0 1px rgba(255, 230, 168, 0.22),
+    0 26px 70px rgba(0, 0, 0, 0.7);
 }
 
-/* ── the title cartouche ───────────────────────────────────────────── */
+/* corner ornaments on the frame */
+.chart-frame > i {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 230, 168, 0.55);
+  pointer-events: none;
+}
+.chart-frame > i:nth-child(1) { top: 4px; left: 4px; border-right: 0; border-bottom: 0; }
+.chart-frame > i:nth-child(2) { top: 4px; right: 4px; border-left: 0; border-bottom: 0; }
+.chart-frame > i:nth-child(3) { bottom: 4px; left: 4px; border-right: 0; border-top: 0; }
+.chart-frame > i:nth-child(4) { bottom: 4px; right: 4px; border-left: 0; border-top: 0; }
 
-.cartouche {
-  top: 26px;
-  left: 28px;
-  max-width: 380px;
-  padding: 20px 24px 18px;
+.chart {
+  position: absolute;
+  inset: 12px;
+  overflow: hidden;
+  border-radius: 2px;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.75);
 }
 
-.cartouche h1 {
+.chart canvas { display: block; cursor: crosshair; }
+
+/* the runic strip along the foot of the chart */
+.runes {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  height: 17px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.42em;
+  color: rgba(224, 178, 90, 0.42);
+  background: linear-gradient(180deg, transparent, rgba(5, 10, 24, 0.9));
+  pointer-events: none;
+}
+
+/* ── the banner over the frame ─────────────────────────────────────── */
+
+.banner {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 460px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.banner svg { display: block; width: 100%; height: auto; }
+
+.banner h1 {
+  position: absolute;
+  inset: 18% 16% 22%;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
   font-family: var(--display);
   font-weight: 600;
-  font-size: 21px;
-  line-height: 1.28;
-  letter-spacing: 0.03em;
-  margin: 0 0 4px;
-  color: var(--ley-bright);
-  text-shadow: 0 0 18px rgba(224, 178, 90, 0.42);
-}
-
-.cartouche .rule {
-  height: 1px;
-  margin: 11px 0 10px;
-  background: linear-gradient(90deg, transparent, var(--brass), transparent);
-}
-
-.cartouche p {
-  margin: 0;
   font-size: 15px;
-  line-height: 1.55;
-  color: rgba(232, 220, 192, 0.8);
+  line-height: 1.24;
+  letter-spacing: 0.05em;
+  color: #3a2c10;
 }
 
-.cartouche .place {
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ley);
-  margin-top: 12px;
-}
-
-/* ── plaques floating on the chart ─────────────────────────────────── */
+/* ── plaques on the chart ──────────────────────────────────────────── */
 
 .sigil {
   position: absolute;
-  z-index: 2;
-  transform: translate(-50%, calc(-100% - 30px));
-  padding: 6px 11px;
+  z-index: 3;
+  transform: translate(-50%, calc(-100% - 26px));
+  padding: 5px 10px;
   white-space: nowrap;
   text-align: center;
   pointer-events: none;
   border-radius: 2px;
-  background: linear-gradient(170deg, rgba(14, 24, 50, 0.93), rgba(6, 11, 26, 0.95));
+  background: linear-gradient(170deg, rgba(14, 24, 50, 0.94), rgba(6, 11, 26, 0.96));
   border: 1px solid rgba(176, 141, 74, 0.6);
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(224, 178, 90, 0.12);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.65);
 }
 
 .sigil b {
   display: block;
   font-family: var(--display);
   font-weight: 600;
-  font-size: 11.5px;
-  letter-spacing: 0.09em;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
   color: var(--ley-bright);
 }
 
@@ -340,58 +387,131 @@ html, body {
   display: block;
   font-family: var(--mono);
   font-style: normal;
-  font-size: 9.5px;
+  font-size: 9px;
   margin-top: 2px;
-  color: rgba(232, 220, 192, 0.62);
+  color: rgba(232, 220, 192, 0.6);
 }
 
-.sigil.ward {
-  border-color: rgba(226, 96, 58, 0.7);
+.sigil.ward { border-color: rgba(226, 96, 58, 0.7); }
+.sigil.ward b { color: #ffbfa4; }
+
+/* ── the title card, pinned inside the chart ───────────────────────── */
+
+.cartouche {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 4;
+  max-width: 268px;
+  padding: 14px 16px 13px;
 }
 
-.sigil.ward b {
-  color: #ffbfa4;
+.cartouche h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.32;
+  margin: 0;
+  color: var(--ley-bright);
 }
 
-/* ── the instrument rail ───────────────────────────────────────────── */
+.cartouche p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(232, 220, 192, 0.72);
+}
+
+.cartouche .place {
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ley);
+  margin-top: 9px;
+}
+
+/* ── the flux matrix inset ─────────────────────────────────────────── */
+
+.flux {
+  position: absolute;
+  left: 18px;
+  bottom: 40px;
+  z-index: 4;
+  width: 210px;
+  padding: 11px 13px 10px;
+}
+
+.flux h3 {
+  font-family: var(--display);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+  color: var(--ley);
+}
+
+.flux-plot { display: block; width: 100%; height: auto; }
+.flux-axis { font-family: var(--mono); font-size: 7px; fill: rgba(232, 220, 192, 0.5); }
+.flux-note,
+.flux-empty {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: rgba(232, 220, 192, 0.6);
+}
+
+/* ── the eastern instrument rail ───────────────────────────────────── */
 
 .rail {
-  top: 26px;
-  right: 28px;
+  position: absolute;
+  top: 74px;
+  right: 30px;
+  bottom: 214px;
+  width: 262px;
+  z-index: 5;
   display: flex;
-  gap: 9px;
-  align-items: stretch;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.seek {
+  display: flex;
+  gap: 7px;
 }
 
 .rune-input {
+  flex: 1;
+  min-width: 0;
   font-family: var(--mono);
-  font-size: 11.5px;
-  width: 232px;
-  padding: 9px 13px;
+  font-size: 11px;
+  padding: 8px 11px;
   color: var(--vellum);
-  background: rgba(6, 11, 26, 0.9);
+  background: rgba(4, 8, 18, 0.9);
   border: 1px solid var(--brass-dark);
   border-radius: 2px;
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.65);
 }
 
-.rune-input::placeholder { color: rgba(232, 220, 192, 0.34); }
+.rune-input::placeholder { color: rgba(232, 220, 192, 0.32); }
 .rune-input:focus {
   outline: none;
   border-color: var(--brass);
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.6), 0 0 14px rgba(224, 178, 90, 0.28);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.65), 0 0 14px rgba(224, 178, 90, 0.3);
 }
 
 .rune-btn {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 9px 17px;
+  padding: 8px 14px;
   cursor: pointer;
+  white-space: nowrap;
   color: var(--ley-bright);
-  background: linear-gradient(180deg, rgba(30, 46, 88, 0.9), rgba(10, 18, 40, 0.92));
+  background: linear-gradient(180deg, rgba(30, 46, 88, 0.92), rgba(10, 18, 40, 0.94));
   border: 1px solid var(--brass-dark);
   border-radius: 2px;
   transition: border-color 0.18s, box-shadow 0.18s, color 0.18s;
@@ -400,101 +520,189 @@ html, body {
 .rune-btn:hover:not(:disabled) {
   border-color: var(--ley);
   color: #fff6dd;
-  box-shadow: 0 0 18px rgba(224, 178, 90, 0.34);
+  box-shadow: 0 0 16px rgba(224, 178, 90, 0.34);
 }
 
 .rune-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .rune-btn.warded {
   color: #ffd0bb;
-  border-color: rgba(226, 96, 58, 0.62);
-  background: linear-gradient(180deg, rgba(88, 32, 20, 0.9), rgba(38, 14, 10, 0.92));
+  border-color: rgba(226, 96, 58, 0.6);
+  background: linear-gradient(180deg, rgba(88, 32, 20, 0.92), rgba(38, 14, 10, 0.94));
 }
-
 .rune-btn.warded:hover:not(:disabled) {
   border-color: var(--hazard);
-  box-shadow: 0 0 18px rgba(226, 96, 58, 0.38);
+  box-shadow: 0 0 16px rgba(226, 96, 58, 0.4);
 }
 
 /* ── the ledger ────────────────────────────────────────────────────── */
 
-.ledger {
-  top: 96px;
-  right: 28px;
-  width: 262px;
-  padding: 16px 17px 15px;
-}
+.ledger { padding: 14px 15px 13px; flex: 1; overflow-y: auto; min-height: 0; }
 
 .ledger h2 {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  margin: 0 0 12px;
+  margin: 0 0 11px;
   color: var(--ley);
 }
 
-.ledger dl {
-  margin: 0;
-  display: grid;
-  gap: 7px;
-}
+.ledger dl { margin: 0; display: grid; gap: 6px; }
 
 .ledger .row {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: baseline;
-  font-size: 12.5px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(176, 141, 74, 0.16);
+  font-size: 12px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(176, 141, 74, 0.15);
 }
-
 .ledger .row:last-child { border-bottom: 0; padding-bottom: 0; }
-.ledger .row dt { color: rgba(232, 220, 192, 0.6); }
-.ledger .row dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--vellum); }
+.ledger .row dt { color: rgba(232, 220, 192, 0.58); }
+.ledger .row dd { margin: 0; font-family: var(--mono); font-size: 11.5px; }
 .ledger .row.peril dd { color: #ffb49a; }
 .ledger .row.aether dd { color: var(--aether); }
 
 .ledger .section {
   font-family: var(--display);
-  font-size: 9.5px;
+  font-size: 9px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(224, 178, 90, 0.66);
-  margin: 13px 0 8px;
-  padding-top: 11px;
+  margin: 11px 0 7px;
+  padding-top: 10px;
   border-top: 1px solid rgba(176, 141, 74, 0.24);
 }
 
-/* ── the readout along the foot ────────────────────────────────────── */
+/* ── the desk ──────────────────────────────────────────────────────── */
+
+.desk {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 200px;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 30px 18px;
+  background:
+    linear-gradient(180deg, transparent, rgba(5, 8, 16, 0.85) 26%, #0a0d16 60%),
+    linear-gradient(180deg, transparent 40%, #241a10 42%, #12100c 100%);
+  border-top: 1px solid rgba(176, 141, 74, 0.2);
+}
+
+.desk-left,
+.desk-right {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.orrery { width: 108px; height: 108px; }
+.orrery svg { width: 100%; height: 100%; }
+.orrery-cage { transform-origin: 60px 60px; animation: turn 34s linear infinite; }
+.orrery-ring { transform-origin: 60px 60px; animation: turn 21s linear infinite reverse; }
+.orrery-ring-2 { transform-origin: 60px 60px; animation: turn 27s linear infinite; }
+.orrery-core { animation: breathe 4.6s ease-in-out infinite; transform-origin: 60px 60px; }
+
+@keyframes turn { to { transform: rotate(360deg); } }
+@keyframes breathe { 50% { opacity: 0.62; transform: scale(0.9); } }
+
+/* ── portraits and portholes ───────────────────────────────────────── */
+
+.porthole {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: center;
+}
+.porthole:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.porthole .bezel {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: conic-gradient(from 220deg, #7a6330, #d9c186 22%, #4e3d1e 48%, #c9a866 72%, #3d3116);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 230, 168, 0.3);
+}
+
+.porthole .glass {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 34% 28%, #1a2c56, #060b1a 78%);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.85), inset 0 2px 0 rgba(255, 255, 255, 0.08);
+}
+
+.porthole .glass svg { width: 66%; height: 66%; }
+
+.porthole .rivets { position: absolute; inset: 0; }
+.porthole .rivets i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--brass-lit), #3a2d12);
+}
+
+.porthole .plate {
+  display: block;
+  margin-top: 7px;
+  font-family: var(--display);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(232, 220, 192, 0.72);
+}
+
+.porthole.lit .glass { box-shadow: inset 0 0 22px rgba(87, 214, 232, 0.35); }
+.porthole:hover:not(:disabled) .bezel { box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 22px rgba(224,178,90,0.4), inset 0 0 0 1px rgba(255,230,168,0.5); }
+
+.figure .bezel { width: 118px; height: 118px; }
+.figure .glass { width: 92px; height: 92px; }
+.figure .glass svg { width: 84%; height: 84%; }
+
+/* ── the readout ───────────────────────────────────────────────────── */
 
 .readout {
-  bottom: 26px;
+  position: absolute;
   left: 50%;
+  bottom: 210px;
   transform: translateX(-50%);
-  padding: 9px 18px;
+  z-index: 6;
+  padding: 8px 16px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   text-align: center;
   color: rgba(232, 220, 192, 0.9);
 }
-
-.readout .dim { color: rgba(232, 220, 192, 0.5); }
-
-.foot-rail {
-  bottom: 26px;
-  right: 28px;
-  display: flex;
-  gap: 9px;
-}
+.readout .dim { color: rgba(232, 220, 192, 0.48); }
 
 .alarum {
-  top: 96px;
-  right: 306px;
-  max-width: 300px;
-  padding: 9px 13px;
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 8px 13px;
   font-family: var(--mono);
   font-size: 11px;
   color: #ffd0bb;
@@ -506,103 +714,52 @@ html, body {
 .gate {
   position: absolute;
   inset: 0;
-  z-index: 8;
+  z-index: 10;
   display: grid;
   place-items: center;
-  background: radial-gradient(70% 60% at 50% 45%, rgba(5, 10, 24, 0.7), rgba(5, 10, 24, 0.95));
-  backdrop-filter: blur(2px);
+  background: radial-gradient(70% 60% at 50% 45%, rgba(5, 10, 24, 0.72), rgba(5, 10, 24, 0.96));
+  backdrop-filter: blur(3px);
 }
 
-.gate .panel {
-  width: min(560px, 88vw);
-  padding: 38px 40px 34px;
-  text-align: center;
-}
+.gate .panel { width: min(560px, 88vw); padding: 36px 40px 32px; text-align: center; }
 
 .gate h1 {
   font-family: var(--display);
   font-weight: 600;
-  font-size: clamp(24px, 3.4vw, 34px);
-  line-height: 1.24;
+  font-size: clamp(22px, 3.2vw, 31px);
+  line-height: 1.26;
   margin: 0 0 6px;
   color: var(--ley-bright);
   text-shadow: 0 0 26px rgba(224, 178, 90, 0.4);
 }
 
-.gate .sub {
-  font-size: 15.5px;
-  color: rgba(232, 220, 192, 0.74);
-  margin: 0 0 26px;
-}
-
-.gate .field {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.gate .rune-input { width: 300px; }
-
+.gate .sub { font-size: 15px; color: rgba(232, 220, 192, 0.74); margin: 0 0 24px; }
+.gate .field { display: flex; gap: 10px; justify-content: center; }
+.gate .rune-input { flex: 0 0 300px; }
 .gate .aside {
-  margin: 22px 0 0;
+  margin: 20px 0 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   color: rgba(232, 220, 192, 0.5);
   line-height: 1.7;
 }
 
-/* ── the plate, over the chart ─────────────────────────────────────── */
+/* ── overlays ──────────────────────────────────────────────────────── */
 
 .plate-overlay {
   position: absolute;
   inset: 0;
-  z-index: 9;
+  z-index: 11;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(4, 8, 18, 0.9);
+  background: rgba(4, 8, 18, 0.92);
   overflow: auto;
 }
-
 .plate-overlay .plate { background: var(--plate); max-width: 560px; width: 100%; }
 
-/* ── the drawer ────────────────────────────────────────────────────── */
-
-.dash {
-  position: absolute;
-  top: 0; right: 0; bottom: 0;
-  z-index: 7;
-  width: 356px;
-  max-width: 90vw;
-  overflow-y: auto;
-  padding: 22px 22px 32px;
-  background: linear-gradient(180deg, rgba(9, 16, 36, 0.97), rgba(5, 9, 22, 0.98));
-  border-left: 1px solid var(--brass-dark);
+@media (max-width: 1180px) {
+  .chart-frame { right: 30px; bottom: 250px; }
+  .rail { top: auto; bottom: 214px; right: 30px; width: 300px; height: 132px; }
+  .desk { height: 190px; }
 }
-
-.dash header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.dash header h2 {
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  margin: 0;
-  color: var(--ley);
-}
-
-.dash .panel { padding: 15px 16px; margin-bottom: 12px; }
-.dash .panel h3 {
-  font-family: var(--display);
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  margin: 0 0 11px;
-  color: rgba(224, 178, 90, 0.72);
-}
-.dash .note { font-size: 13px; line-height: 1.6; color: rgba(232, 220, 192, 0.6); }
