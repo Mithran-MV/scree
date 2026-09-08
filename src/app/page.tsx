@@ -33,12 +33,13 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [plate, setPlate] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!address.trim()) return;
+  const loadAddress = useCallback(async (raw: string) => {
+    const target = raw.trim();
+    if (!target) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/terrain?address=${encodeURIComponent(address.trim())}`);
+      const res = await fetch(`/api/terrain?address=${encodeURIComponent(target)}`);
       const body = await res.json();
       if (!res.ok) {
         setError(body.error ?? `request failed with ${res.status}`);
@@ -50,7 +51,7 @@ export default function Page() {
       }
       setLoaded({
         baskets: body.baskets,
-        label: `${address.slice(0, 6)}…${address.slice(-4)}`,
+        label: `${target.slice(0, 6)}…${target.slice(-4)}`,
         failed: body.failed ?? [],
         offAxisCollateralUSD: body.offAxisCollateralUSD ?? 0,
       });
@@ -59,7 +60,36 @@ export default function Page() {
     } finally {
       setBusy(false);
     }
-  }, [address]);
+  }, []);
+
+  const load = useCallback(() => loadAddress(address), [loadAddress, address]);
+
+  /**
+   * Connect a wallet through the browser's injected provider.
+   *
+   * This asks for an address and nothing else: no signature, no approval, no
+   * transaction. The address is public information the survey would have read
+   * from a paste anyway; connecting only saves the paste. If no provider is
+   * present, the field is still there.
+   */
+  const [wallet, setWallet] = useState<string | null>(null);
+  const connect = useCallback(async () => {
+    const eth = (window as unknown as { ethereum?: { request: (a: { method: string }) => Promise<unknown> } }).ethereum;
+    if (!eth) {
+      setError("No wallet found in this browser. Paste an address instead.");
+      return;
+    }
+    try {
+      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
+      const account = accounts[0];
+      if (!account) return;
+      setWallet(account);
+      setAddress(account);
+      await loadAddress(account);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The wallet declined the request.");
+    }
+  }, [loadAddress]);
 
   return (
     <main className="stage">
@@ -72,6 +102,8 @@ export default function Page() {
         address={address}
         onAddress={setAddress}
         onSurvey={load}
+        onConnect={connect}
+        wallet={wallet}
         onReference={() => {
           setLoaded(DEMO);
           setError(null);

@@ -25,6 +25,8 @@ interface Props {
   scoutsBusy: boolean;
   onAddress: (v: string) => void;
   onSurvey: () => void;
+  onConnect: () => void;
+  wallet: string | null;
   onReference: () => void;
   onScouts: () => void;
   onPlate: () => void;
@@ -61,6 +63,9 @@ export function Journal(p: Props) {
         </div>
         {p.error && <p className="journal-error">{p.error}</p>}
         <div className="journal-actions">
+          <button className="rune-btn connect" onClick={p.onConnect} disabled={p.busy}>
+            {p.wallet ? `${p.wallet.slice(0, 6)}…${p.wallet.slice(-4)}` : "Connect wallet"}
+          </button>
           <button className="rune-btn" onClick={p.onReference}>Reference book</button>
           <button className="rune-btn warded" onClick={p.onScouts} disabled={p.scoutsBusy}>
             {p.scoutsBusy ? "Scouts out…" : "Send 200 scouts"}

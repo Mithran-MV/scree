@@ -300,6 +300,8 @@ html, body {
 }
 .rune-btn:hover:not(:disabled) { border-color: var(--ley); box-shadow: 0 0 12px rgba(53, 224, 232, 0.3); }
 .rune-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.rune-btn.connect { border-color: var(--brass); color: var(--vellum); }
+.rune-btn.connect:hover:not(:disabled) { border-color: #e7c98a; box-shadow: 0 0 12px rgba(176, 141, 74, 0.4); }
 .rune-btn.warded { border-color: rgba(255, 138, 90, 0.6); color: #ffd0bb; }
 .rune-btn.warded:hover:not(:disabled) { border-color: var(--peril); box-shadow: 0 0 12px rgba(255, 138, 90, 0.35); }
 

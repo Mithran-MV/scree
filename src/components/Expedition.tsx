@@ -21,6 +21,8 @@ interface Props {
   address: string;
   onAddress: (v: string) => void;
   onSurvey: () => void;
+  onConnect: () => void;
+  wallet: string | null;
   onReference: () => void;
   onPlate: () => void;
 }
@@ -235,6 +237,8 @@ export function Expedition(props: Props) {
         scoutsBusy={scoutsBusy}
         onAddress={props.onAddress}
         onSurvey={props.onSurvey}
+        onConnect={props.onConnect}
+        wallet={props.wallet}
         onReference={props.onReference}
         onScouts={sendScouts}
         onPlate={props.onPlate}
