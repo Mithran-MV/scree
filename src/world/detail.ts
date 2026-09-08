@@ -147,19 +147,25 @@ export function drawStreams(ctx: Ctx, paint: WorldPaint, seedCount = 22): void {
       path.push({ x, y });
       if (wet[at(x, y)]) break;
 
-      // Steepest descent over the eight neighbours.
+      // Steepest descent, scored as drop per unit DISTANCE rather than per
+      // step. Comparing raw drop lets a diagonal win every tie simply because
+      // it travels further, and the streams come out as parallel scratches
+      // ruled across the hillside instead of following the ground.
+      const here = elevation[at(x, y)]!;
       let bestX = x;
       let bestY = y;
-      let bestZ = elevation[at(x, y)]!;
+      let bestScore = 0;
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
           const nx = x + dx;
           const ny = y + dy;
           if (nx < 1 || nx >= W - 1 || ny < 1 || ny >= H - 1) continue;
-          const nz = elevation[at(nx, ny)]!;
-          if (nz < bestZ) {
-            bestZ = nz;
+          const drop = here - elevation[at(nx, ny)]!;
+          if (drop <= 0) continue;
+          const score = drop / Math.hypot(dx, dy);
+          if (score > bestScore) {
+            bestScore = score;
             bestX = nx;
             bestY = ny;
           }
