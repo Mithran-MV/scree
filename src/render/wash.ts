@@ -61,7 +61,7 @@ export function wash(r: Raster, opts: WashOptions): ImageDataLike {
         // gesture beats visibly and reads as a rendering bug, not a style.
         const period = Math.max(3 * dpr, Math.round(lerp(6 * dpr, 3 * dpr, depth)));
         if (py % period === 0) {
-          const alpha = lerp(0.35, rulingMax, depth);
+          const alpha = lerp(0.1, rulingMax * 0.38, depth);
           cr = theme.ink.r * alpha + cr * (1 - alpha);
           cg = theme.ink.g * alpha + cg * (1 - alpha);
           cb = theme.ink.b * alpha + cb * (1 - alpha);

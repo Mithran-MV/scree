@@ -66,7 +66,14 @@ export const HACHURE_BUCKETS = 6;
  * as ink and white rather than a blot. The gain is a display choice like the
  * vertical exaggeration beside it, and like it, it is printed on the plate.
  */
-const COMB_TOP_DEGREES = 34;
+const COMB_TOP_DEGREES = 22;
+
+/**
+ * The heaviest a stroke is ever cut, as a fraction of the lattice pitch.
+ * Lehmann's rule ends at solid black; a solid hillside is a blot rather than a
+ * reading, so the top of the range stops short of it.
+ */
+const MAX_INK = 0.55;
 
 /**
  * Deterministic hash for lattice jitter.
@@ -123,7 +130,7 @@ export interface Comb {
 export function hachureSeeds(r: Raster, opts: HachureOptions): Comb {
   const { width: fw, height: fh } = r.window;
   const size = opts.size;
-  const pitch = opts.pitch ?? 7;
+  const pitch = opts.pitch ?? 8;
   const buckets = opts.buckets ?? HACHURE_BUCKETS;
 
   const exaggeration = exaggerationFor(r);
@@ -176,6 +183,12 @@ export function hachureSeeds(r: Raster, opts: HachureOptions): Comb {
       const slopeDeg = (Math.atan(mag * gain) * 180) / Math.PI;
       if (slopeDeg < cullDeg) continue;
 
+      // Stroke length is a real vertical drop, so it is measured against the
+      // TRUE gradient, not the exaggerated one the width is cut from. Dividing
+      // by the exaggerated gradient makes every stroke collapse onto the lower
+      // clamp and the comb reads as speckle rather than engraving.
+      const rawMag = mag / exaggeration;
+
       // Downhill, always.
       const gx = g.dzdx / sx;
       const gy = g.dzdy / sy;
@@ -185,8 +198,14 @@ export function hachureSeeds(r: Raster, opts: HachureOptions): Comb {
       const dx = -gx / norm;
       const dy = gy / norm;
 
-      const length = clamp((0.55 * opts.interval) / Math.max(mag, 1e-6), 2.5, 11);
-      const inkFraction = clamp(slopeDeg / 45, 0, 0.92);
+      // Capped near the lattice pitch: a stroke longer than the spacing runs
+      // into the row below it and the comb closes into a solid mass.
+      const length = clamp(opts.interval / Math.max(rawMag, 1e-9), 3, pitch + 1);
+      // Lehmann's ratio, measured against the range this plate was gained onto
+      // rather than against a literal 45 degrees. Against 45 the whole surface
+      // would land in the lightest bucket or two and the comb would carry no
+      // detail at all.
+      const inkFraction = clamp(slopeDeg / COMB_TOP_DEGREES, 0, 1) * MAX_INK;
       const half = (inkFraction * pitch) / 2;
       if (half < 0.18) continue;
 
@@ -198,7 +217,7 @@ export function hachureSeeds(r: Raster, opts: HachureOptions): Comb {
         length,
         half,
         tip: half * 0.35,
-        bucket: Math.min(buckets - 1, Math.floor(inkFraction * buckets)),
+        bucket: Math.min(buckets - 1, Math.floor((inkFraction / MAX_INK) * buckets)),
       });
     }
   }
