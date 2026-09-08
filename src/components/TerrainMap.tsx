@@ -69,8 +69,7 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover, onPlate }: Prop
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = SIZE * dpr;
     canvas.height = SIZE * dpr;
-    canvas.style.width = `${SIZE}px`;
-    canvas.style.height = `${SIZE}px`;
+    canvas.style.height = "auto";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const sx = SIZE / (win.width - 1);
