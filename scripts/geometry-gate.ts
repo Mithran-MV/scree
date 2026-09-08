@@ -16,14 +16,17 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { rasterize, windowAt } from "../src/field/raster";
+import { rasterize, renderWindow } from "../src/field/raster";
 import { extractFeatures } from "../src/field/features";
+import { niceInterval } from "../src/render/contours";
+import { hachureSeeds } from "../src/render/hachure";
+import { auditTheme } from "../src/render/theme";
 import { exposure, walletShape } from "../src/core/kernel";
 import { bracket } from "../src/core/bracket";
-import { CARRY_BOOK, SPOT_ETH_USD } from "../src/core/fixtures/carry-book";
+import { CARRY_BOOK, LONG_ONLY_BOOK, SPOT_ETH_USD } from "../src/core/fixtures/carry-book";
 
 const book = CARRY_BOOK;
-const win = windowAt(SPOT_ETH_USD);
+const win = renderWindow(SPOT_ETH_USD);
 const raster = rasterize(book, win);
 const f = extractFeatures(raster);
 const shape = walletShape(book);
@@ -82,6 +85,48 @@ if (!f.crestMonotone && f.foldLines8 === 0) {
   failures.push("terrain is not monotone yet no crease was found to explain it");
 }
 
+/* ── the plate must stay a survey, not become a picture ──────────────── */
+
+// The terrain being real is only half of it. A palette change that sinks the
+// contours into the wash, or a cull that blanks a genuinely shallow wallet,
+// would turn a measurement into decoration without altering a single number
+// above. These assertions are the other half.
+
+const themeProblems = auditTheme();
+for (const why of themeProblems) failures.push(`theme: ${why}`);
+
+const interval = niceInterval(Math.max(0.05, raster.range.max), 14);
+const combMixed = hachureSeeds(raster, { size: 512, interval });
+const oneSidedRaster = rasterize(LONG_ONLY_BOOK, win);
+const combOneSided = hachureSeeds(oneSidedRaster, {
+  size: 512,
+  interval: niceInterval(Math.max(0.05, oneSidedRaster.range.max), 14),
+});
+
+console.log("  plate");
+console.log("  ------------------------------------------------------");
+console.log(`  contour interval           ${interval}`);
+console.log(`  comb gain                  ${combMixed.gain.toFixed(2)}x`);
+console.log(`  cull angle                 ${combMixed.cullDeg.toFixed(2)} deg`);
+console.log(`  strokes, this book         ${combMixed.seeds.length}`);
+console.log(`  strokes, one-sided book    ${combOneSided.seeds.length}`);
+console.log(`  theme audit                ${themeProblems.length === 0 ? "clean" : `${themeProblems.length} problems`}`);
+console.log("");
+
+// A blank hillside would be a rendering failure presented as a finding.
+if (combMixed.seeds.length < 200) {
+  failures.push(`the comb cut only ${combMixed.seeds.length} strokes on this book; the hillside would read as blank paper`);
+}
+if (combOneSided.seeds.length < 200) {
+  failures.push(`the comb cut only ${combOneSided.seeds.length} strokes on a one-sided book; a ramp must still be engraved`);
+}
+
+// A one-sided book must be drawable and must say what it is.
+const oneSidedFeatures = extractFeatures(oneSidedRaster);
+if (oneSidedFeatures.boundaryPass) {
+  failures.push("a one-sided book reported a pass, so no gated mark can be trusted");
+}
+
 const report = {
   generatedAt: new Date().toISOString(),
   spot: SPOT_ETH_USD,
@@ -89,6 +134,14 @@ const report = {
   bracket: br,
   features: f,
   verdict,
+  plate: {
+    interval,
+    combGain: combMixed.gain,
+    cullDeg: combMixed.cullDeg,
+    strokes: combMixed.seeds.length,
+    strokesOneSided: combOneSided.seeds.length,
+    themeProblems,
+  },
   failures,
 };
 
