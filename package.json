@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "next": "^15.5.25",
+    "phaser": "^4.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "viem": "^2.56.3"
