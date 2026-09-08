@@ -763,3 +763,31 @@ html, body {
   .rail { top: auto; bottom: 214px; right: 30px; width: 300px; height: 132px; }
   .desk { height: 190px; }
 }
+
+.desk-middle {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding-bottom: 8px;
+  opacity: 0.92;
+}
+
+.desk-object {
+  display: block;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
+}
+
+.desk-right { align-items: flex-end; }
+
+.desk-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.porthole.figure .glass canvas { image-rendering: pixelated; }
+
+@media (max-width: 1320px) {
+  .desk-middle { display: none; }
+}

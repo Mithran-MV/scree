@@ -3,6 +3,21 @@
 import { useCallback, useMemo, useState } from "react";
 import { ArcaneMap, type ChartReadout } from "@/components/ArcaneMap";
 import { TerrainMap } from "@/components/TerrainMap";
+import { ScrollBanner } from "@/components/chrome/ScrollBanner";
+import { Porthole } from "@/components/chrome/Porthole";
+import { AetherFlux } from "@/components/chrome/AetherFlux";
+import { Orrery } from "@/components/chrome/Orrery";
+import { PixelSprite } from "@/components/chrome/PixelSprite";
+import { ChartGlyph, TerraceGlyph } from "@/components/chrome/Figures";
+import {
+  BOOKS,
+  DATA_SEEKER,
+  KEYS,
+  QUILL,
+  RISK_ENGINEER,
+  SCROLL,
+  SEAL,
+} from "@/arcane/figures";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import { bracket } from "@/core/bracket";
 import { exposure, walletShape } from "@/core/kernel";
@@ -41,7 +56,6 @@ export default function Page() {
   const [features, setFeatures] = useState<Features | null>(null);
   const [hover, setHover] = useState<ChartReadout | null>(null);
   const [gate, setGate] = useState(true);
-  const [dash, setDash] = useState(false);
   const [plate, setPlate] = useState(false);
 
   const shape = useMemo(() => walletShape(loaded.baskets), [loaded.baskets]);
@@ -79,80 +93,145 @@ export default function Page() {
     }
   }
 
+  const survey = (
+    <div className="seek">
+      <input
+        className="rune-input"
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && !busy && load()}
+        placeholder="0x… paste an address"
+        spellCheck={false}
+      />
+      <button className="rune-btn" onClick={load} disabled={busy || address.trim().length === 0}>
+        {busy ? "Reading" : "Survey"}
+      </button>
+    </div>
+  );
+
   return (
     <main className="stage">
-      <ArcaneMap
-        baskets={loaded.baskets}
-        spot={SPOT_ETH_USD}
-        onFeatures={onFeatures}
-        onHover={onHover}
-      >
-        <section className="hud brass cartouche">
-          <h1>The Scree Survey — Liquidation Topography</h1>
-          <div className="rule" />
-          <p>A living chart of where your book dies, and how long price must stay there to kill it. Sculpt your defence on the ground itself.</p>
-          <div className="place">{placeName(shape)}</div>
-        </section>
+      <div className="chart-frame">
+        <i /><i /><i /><i />
 
-        <div className="hud rail">
-          <input
-            className="rune-input"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !busy && load()}
-            placeholder="0x… paste an address"
-            spellCheck={false}
-          />
-          <button className="rune-btn" onClick={load} disabled={busy || address.trim().length === 0}>
-            {busy ? "Reading" : "Survey"}
-          </button>
-          <button className="rune-btn" onClick={() => setDash((open) => !open)}>Ledger</button>
-          <button className="rune-btn warded" disabled title="not wired up yet">
-            Connect wallet
-          </button>
-        </div>
-
-        {error && <div className="hud brass alarum">{error}</div>}
-
-        {!dash && (
-          <section className="hud brass ledger">
-            <h2>Live feed</h2>
-            <dl>
-              <div className="row"><dt>ETH</dt><dd>{usd(SPOT_ETH_USD)}</dd></div>
-              <div className="row peril"><dt>crash liquidation</dt><dd>{usd(br.lower)}</dd></div>
-              <div className="row peril"><dt>pump liquidation</dt><dd>{usd(br.upper)}</dd></div>
-
-              <div className="section">Measured on the chart</div>
-              <div className="row"><dt>citadels</dt><dd>{features?.binders.length ?? "—"}</dd></div>
-              <div className="row"><dt>ley-veins</dt><dd>{features?.foldLines8 ?? "—"}</dd></div>
-              <div className="row"><dt>drowned basins</dt><dd>{features?.basins ?? "—"}</dd></div>
-              <div className="row aether"><dt>passes</dt><dd>{features?.boundaryPass ? 1 : 0}</dd></div>
-              <div className="row">
-                <dt>rises with price</dt>
-                <dd>{features ? `${(features.monoFraction * 100).toFixed(1)}%` : "—"}</dd>
-              </div>
-            </dl>
+        <ArcaneMap
+          baskets={loaded.baskets}
+          spot={SPOT_ETH_USD}
+          onFeatures={onFeatures}
+          onHover={onHover}
+        >
+          <section className="brass cartouche">
+            <h2>The Scree Survey — Liquidation Topography</h2>
+            <p>A living chart of where your book dies, and how long price must stay there to kill it.</p>
+            <div className="place">{placeName(shape)}</div>
           </section>
+
+          <AetherFlux baskets={loaded.baskets} />
+
+          <div className="runes" aria-hidden="true">
+            ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ᛇ ᛈ ᛉ ᛊ ᛏ ᛒ ᛖ ᛗ ᛚ ᛜ ᛞ ᛟ
+          </div>
+        </ArcaneMap>
+
+        <ScrollBanner title="The Scalable Liquidation Defence Tool" />
+      </div>
+
+      {error && <div className="brass alarum">{error}</div>}
+
+      <div className="rail">
+        {survey}
+
+        <section className="brass ledger">
+          <h2>Live feed</h2>
+          <dl>
+            <div className="row"><dt>ETH</dt><dd>{usd(SPOT_ETH_USD)}</dd></div>
+            <div className="row peril"><dt>crash liquidation</dt><dd>{usd(br.lower)}</dd></div>
+            <div className="row peril"><dt>pump liquidation</dt><dd>{usd(br.upper)}</dd></div>
+
+            <div className="section">Measured on the chart</div>
+            <div className="row"><dt>citadels</dt><dd>{features?.binders.length ?? "—"}</dd></div>
+            <div className="row"><dt>ley-veins</dt><dd>{features?.foldLines8 ?? "—"}</dd></div>
+            <div className="row"><dt>drowned basins</dt><dd>{features?.basins ?? "—"}</dd></div>
+            <div className="row aether"><dt>passes</dt><dd>{features?.boundaryPass ? 1 : 0}</dd></div>
+            <div className="row">
+              <dt>rises with price</dt>
+              <dd>{features ? `${(features.monoFraction * 100).toFixed(1)}%` : "—"}</dd>
+            </div>
+
+            <div className="section">Workflow</div>
+            <div className="row"><dt>terrace parameters</dt><dd>sealed</dd></div>
+            <div className="row"><dt>enclave</dt><dd>not yet armed</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <div className="readout brass">
+        {hover ? (
+          <>
+            {usd(hover.price)} · held {days(hover.dwellDays)} · health{" "}
+            {(hover.z + 1).toFixed(3)} · {hover.binder ?? "nothing binds"}
+          </>
+        ) : (
+          <span className="dim">move over the ground to read it</span>
         )}
+      </div>
 
-        <div className="hud brass readout">
-          {hover ? (
-            <>
-              {usd(hover.price)} · held {days(hover.dwellDays)} · health{" "}
-              {(hover.z + 1).toFixed(3)} · {hover.binder ?? "nothing binds"}
-            </>
-          ) : (
-            <span className="dim">move over the ground to read it</span>
-          )}
+      <div className="desk">
+        <div className="desk-left">
+          <div className="porthole figure" title="The Data-Seeker">
+            <span className="bezel">
+              <span className="rivets" aria-hidden="true">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <i key={i} style={{ transform: `rotate(${i * 45}deg) translateY(-50px)` }} />
+                ))}
+              </span>
+              <span className="glass">
+                <PixelSprite sprite={DATA_SEEKER} scale={3} />
+              </span>
+            </span>
+            <span className="plate">The Data-Seeker</span>
+          </div>
+          <Orrery />
+          <PixelSprite sprite={BOOKS} scale={3} className="desk-object" />
         </div>
 
-        <div className="hud foot-rail">
-          <button className="rune-btn" onClick={() => { setLoaded(DEMO); setError(null); }}>
-            Reference book
-          </button>
-          <button className="rune-btn warded" onClick={() => setPlate(true)}>Survey plate</button>
+        <div className="desk-middle">
+          <PixelSprite sprite={SCROLL} scale={3} className="desk-object" />
+          <PixelSprite sprite={KEYS} scale={3} className="desk-object" />
+          <PixelSprite sprite={QUILL} scale={3} className="desk-object" />
+          <PixelSprite sprite={SEAL} scale={3} className="desk-object" />
         </div>
-      </ArcaneMap>
+
+        <div className="desk-right">
+          <Porthole label="Flux charting" lit onClick={() => setPlate(true)}>
+            <ChartGlyph />
+          </Porthole>
+          <Porthole label="Terrace control" disabled>
+            <TerraceGlyph />
+          </Porthole>
+          <div className="porthole figure" title="The Risk-Engineer">
+            <span className="bezel">
+              <span className="rivets" aria-hidden="true">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <i key={i} style={{ transform: `rotate(${i * 45}deg) translateY(-50px)` }} />
+                ))}
+              </span>
+              <span className="glass">
+                <PixelSprite sprite={RISK_ENGINEER} scale={3} />
+              </span>
+            </span>
+            <span className="plate">The Risk-Engineer</span>
+          </div>
+          <div className="desk-actions">
+            <button className="rune-btn" onClick={() => { setLoaded(DEMO); setError(null); }}>
+              Reference book
+            </button>
+            <button className="rune-btn warded" disabled title="not wired up yet">
+              Connect wallet
+            </button>
+          </div>
+        </div>
+      </div>
 
       {gate && (
         <div className="gate">
@@ -177,61 +256,12 @@ export default function Page() {
             <p className="aside">
               No wallet, no signature, no gas. Scree reads public positions only and never asks
               for the right to move anything.
-              <br />
-              <button
-                className="rune-btn"
-                style={{ marginTop: 14 }}
-                onClick={() => { setLoaded(DEMO); setGate(false); }}
-              >
-                Walk the reference survey
-              </button>
             </p>
+            <button className="rune-btn" onClick={() => { setLoaded(DEMO); setGate(false); }}>
+              Walk the reference survey
+            </button>
           </section>
         </div>
-      )}
-
-      {dash && (
-        <aside className="dash">
-          <header>
-            <h2>Ledger</h2>
-            <button className="rune-btn" onClick={() => setDash(false)}>Close</button>
-          </header>
-
-          <section className="brass panel">
-            <h3>Reading</h3>
-            <dl>
-              <div className="row"><dt>showing</dt><dd>{loaded.label}</dd></div>
-              <div className="row"><dt>shape</dt><dd>{shape}</dd></div>
-              <div className="row peril"><dt>crash liquidation</dt><dd>{usd(br.lower)}</dd></div>
-              <div className="row peril"><dt>pump liquidation</dt><dd>{usd(br.upper)}</dd></div>
-            </dl>
-          </section>
-
-          <section className="brass panel">
-            <h3>Citadels</h3>
-            <dl>
-              {loaded.baskets.map((b) => (
-                <div className="row" key={b.deploymentId}>
-                  <dt>{b.deploymentId}</dt>
-                  <dd>{exposure(b)}</dd>
-                </div>
-              ))}
-              {loaded.failed.map((f) => (
-                <div className="row" key={f.deploymentId}>
-                  <dt>{f.deploymentId}</dt>
-                  <dd>unsurveyed</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-
-          <p className="note">
-            Two axes only: the price of one asset, and how long it has stayed there. Everything
-            else this book holds is held constant.
-            {loaded.offAxisCollateralUSD > 0 &&
-              ` ${usd(loaded.offAxisCollateralUSD)} of off-axis collateral is not on this chart.`}
-          </p>
-        </aside>
       )}
 
       {plate && (
