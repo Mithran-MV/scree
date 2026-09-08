@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { T, FONT_MONO } from "./theme";
 import { bezel, button, hex, label, panel, plaque, runeStrip, vellumPanel } from "./chrome";
 import type { BakedChart } from "./bakeChart";
+import { ensureDeckTextures } from "./deckObjects";
 
 export interface FeedRow {
   key: string;
@@ -62,6 +63,7 @@ export class ChamberScene extends Phaser.Scene {
 
   create() {
     this.makeMoteTexture();
+    ensureDeckTextures(this);
     this.build();
     this.scale.on("resize", () => this.build(), this);
   }
@@ -596,6 +598,24 @@ export class ChamberScene extends Phaser.Scene {
     this.layer.add(
       button(this, 150, controlY, "Survey plate", { tone: T.brass, onClick: this.opts.onPlate }),
     );
+
+    // Tools left on the deck. Nothing here carries a reading.
+    const scale = Math.max(2, Math.round(deckH / 46));
+    const restY = top + deckH * 0.52;
+    const litter: [string, number, number][] = [
+      ["scree-floppy", kbX - 132, restY],
+      ["scree-circuit", kbX - 46, restY + 6],
+      ["scree-driver", kbX + kbW + 26, restY + 10],
+      ["scree-coil", kbX + kbW + 116, restY],
+    ];
+    for (const [key, lx, ly] of litter) {
+      if (lx < 250 || lx > W - 130) continue;
+      const img = this.add.image(lx, ly, key).setOrigin(0, 0).setScale(scale);
+      const shadow = this.add.graphics();
+      shadow.fillStyle(0x000000, 0.35);
+      shadow.fillEllipse(lx + img.displayWidth / 2, ly + img.displayHeight + 2, img.displayWidth, 5);
+      this.layer.add([shadow, img]);
+    }
 
     // A coolant canister on the right of the deck.
     const canX = W - 84;
