@@ -217,6 +217,7 @@ export function Expedition(props: Props) {
       gameRef.current = game;
       sceneRef.current = scene;
       hudRef.current = hud;
+      hud.setState(hudStateRef.current);
       // Expose the game on its host element so tooling and tests can drive
       // the loop directly, without reaching into React.
       (host as unknown as { __game?: Phaser.Game }).__game = game;
@@ -237,8 +238,11 @@ export function Expedition(props: Props) {
   const sendScoutsRef = useRef<() => void>(() => {});
 
   // Everything the dashboard shows is pushed in; the hud redraws on change.
+  // The latest state is also kept on a ref, so a hud created after this effect
+  // last ran can be handed the current state the moment it exists.
+  const hudStateRef = useRef<Partial<import("@/phaser/HudScene").HudState>>({});
   useEffect(() => {
-    hudRef.current?.setState({
+    hudStateRef.current = {
       label: props.label,
       busy: props.busy,
       error: props.error,
@@ -246,7 +250,8 @@ export function Expedition(props: Props) {
       scoutsBusy,
       feed,
       entries,
-    });
+    };
+    hudRef.current?.setState(hudStateRef.current);
   }, [props.label, props.busy, props.error, props.wallet, scoutsBusy, feed, entries]);
 
   /* ── scouts ───────────────────────────────────────────────────── */
