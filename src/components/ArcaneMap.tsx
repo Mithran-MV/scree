@@ -160,7 +160,7 @@ export function ArcaneMap({ baskets, spot, onHover, onFeatures, children }: Prop
     let top = at[1] / box.h;
     // The ledger owns the eastern column and the rail the northern strip; a
     // plaque that would land under either is walked clear rather than hidden.
-    if (left > 0.68) left = 0.68;
+    if (left > 0.58) left = 0.58;
     if (top < 0.34) top = 0.34 + nudge;
     return {
       left: `${left * 100}%`,
