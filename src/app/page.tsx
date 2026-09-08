@@ -40,7 +40,8 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [features, setFeatures] = useState<Features | null>(null);
   const [hover, setHover] = useState<Readout | null>(null);
-  const [view, setView] = useState<"world" | "survey">("world");
+  const [dash, setDash] = useState(false);
+  const [plate, setPlate] = useState(false);
 
   const shape = useMemo(() => walletShape(loaded.baskets), [loaded.baskets]);
   const br = useMemo(() => bracket(loaded.baskets, 0), [loaded.baskets]);
@@ -77,118 +78,82 @@ export default function Page() {
   }
 
   return (
-    <main className="shell">
-      <header className="masthead">
-        <h1>Scree</h1>
-        <p>a survey map of how you get liquidated</p>
-      </header>
+    <main className="stage">
+      <WorldView
+        baskets={loaded.baskets}
+        spot={SPOT_ETH_USD}
+        onFeatures={onFeatures}
+        onHover={onHover}
+      >
+        <div className="hud hud-brand">
+          <p className="wordmark">SCREE</p>
+          <div className="eyebrow">the ground you borrow on</div>
+          <h2>{placeName(shape)}</h2>
+          <p>
+            High ground is safe and the shoreline is liquidation. West and east is the price
+            of your collateral; north is how long it has stayed there.
+          </p>
+        </div>
 
-      <div className="controls">
-        <input
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !busy && load()}
-          placeholder="0x… paste any address"
-          spellCheck={false}
-        />
-        <button onClick={load} disabled={busy || address.trim().length === 0}>
-          {busy ? "reading…" : "survey"}
-        </button>
-        <button className="ghost" onClick={() => { setLoaded(DEMO); setError(null); }}>
-          reference book
-        </button>
-        <button className="ghost" onClick={() => setView(view === "world" ? "survey" : "world")}>
-          {view === "world" ? "survey plate" : "world"}
-        </button>
-      </div>
-
-      {error && (
-        <p className="note" style={{ color: "var(--accent)" }}>
-          {error}
-        </p>
-      )}
-
-      <div className="layout">
-        {view === "world" ? (
-          <WorldView
-            baskets={loaded.baskets}
-            spot={SPOT_ETH_USD}
-            onFeatures={onFeatures}
-            onHover={onHover}
-          >
-            <div className="hud hud-place">
-              <div className="eyebrow">the ground you borrow on</div>
-              <h2>{placeName(shape)}</h2>
-              <p>
-                High ground is safe and the shoreline is liquidation. West and east is the
-                price of your collateral; north is how long it has stayed there.
-              </p>
-            </div>
-
-            <div className="hud hud-actions">
-              <button className="hud-btn" onClick={() => setView("survey")}>
-                Survey plate
-              </button>
-              <button className="hud-btn primary" disabled title="not built yet">
-                Connect wallet
-              </button>
-            </div>
-
-            <div className="hud hud-feed">
-              <h3>live feed</h3>
-              <ul>
-                <li>
-                  <b>ETH</b>
-                  <span>{usd(SPOT_ETH_USD)}</span>
-                </li>
-                <li className="alarm">
-                  <b>crash liquidation</b>
-                  <span>{usd(br.lower)}</span>
-                </li>
-                <li className="alarm">
-                  <b>pump liquidation</b>
-                  <span>{usd(br.upper)}</span>
-                </li>
-                <li>
-                  <b>holdfasts</b>
-                  <span>{features?.binders.length ?? "—"}</span>
-                </li>
-                <li>
-                  <b>drowned basins</b>
-                  <span>{features?.basins ?? "—"}</span>
-                </li>
-                <li>
-                  <b>passes</b>
-                  <span>{features?.boundaryPass ? 1 : 0}</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="hud hud-legend">
-              {hover ? (
-                <>
-                  <span>
-                    {usd(hover.price)} · held {days(hover.dwellDays)}
-                  </span>
-                  <span>
-                    health {(hover.z + 1).toFixed(3)} · {hover.binder ?? "nothing binds"}
-                  </span>
-                </>
-              ) : (
-                <span>move over the ground to read it</span>
-              )}
-            </div>
-          </WorldView>
-        ) : (
-          <TerrainMap
-            baskets={loaded.baskets}
-            spot={SPOT_ETH_USD}
-            onFeatures={onFeatures}
-            onHover={onHover}
+        <div className="hud hud-bar">
+          <input
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !busy && load()}
+            placeholder="0x… survey any address"
+            spellCheck={false}
           />
+          <button className="hud-btn" onClick={load} disabled={busy || address.trim().length === 0}>
+            {busy ? "reading…" : "Survey"}
+          </button>
+          <button className="hud-btn" onClick={() => setDash((open) => !open)}>
+            Dashboard
+          </button>
+          <button className="hud-btn primary" disabled title="not wired up yet">
+            Connect wallet
+          </button>
+        </div>
+
+        {error && <div className="hud hud-error">{error}</div>}
+
+        {!dash && (
+          <div className="hud hud-feed">
+            <h3>live feed</h3>
+            <ul>
+              <li><b>ETH</b><span>{usd(SPOT_ETH_USD)}</span></li>
+              <li className="alarm"><b>crash liquidation</b><span>{usd(br.lower)}</span></li>
+              <li className="alarm"><b>pump liquidation</b><span>{usd(br.upper)}</span></li>
+              <li><b>holdfasts</b><span>{features?.binders.length ?? "—"}</span></li>
+              <li><b>drowned basins</b><span>{features?.basins ?? "—"}</span></li>
+              <li><b>passes</b><span>{features?.boundaryPass ? 1 : 0}</span></li>
+            </ul>
+          </div>
         )}
 
-        <div>
+        <div className="hud hud-legend">
+          {hover ? (
+            <>
+              <span>{usd(hover.price)} · held {days(hover.dwellDays)}</span>
+              <span>health {(hover.z + 1).toFixed(3)} · {hover.binder ?? "nothing binds"}</span>
+            </>
+          ) : (
+            <span>move over the ground to read it</span>
+          )}
+        </div>
+
+        <div className="hud hud-cta">
+          <button className="hud-btn" onClick={() => setLoaded(DEMO)}>Reference book</button>
+          <button className="hud-btn primary" onClick={() => setPlate(true)}>Survey plate</button>
+        </div>
+      </WorldView>
+
+      {dash && (
+        <aside className="dash">
+          <header>
+            <h2>dashboard</h2>
+            <button className="hud-btn" onClick={() => setDash(false)}>Close</button>
+          </header>
+
           <section className="panel">
             <h2>reading</h2>
             <div className="rows">
@@ -196,14 +161,6 @@ export default function Page() {
               <div><span>shape</span><span>{shape}</span></div>
               <div><span>crash liquidation</span><span>{usd(br.lower)}</span></div>
               <div><span>pump liquidation</span><span>{usd(br.upper)}</span></div>
-              {hover && (
-                <>
-                  <div><span>at price</span><span>{usd(hover.price)}</span></div>
-                  <div><span>held</span><span>{days(hover.dwellDays)}</span></div>
-                  <div><span>health factor</span><span>{(hover.z + 1).toFixed(3)}</span></div>
-                  <div><span>binding</span><span>{hover.binder ?? "—"}</span></div>
-                </>
-              )}
             </div>
           </section>
 
@@ -219,7 +176,6 @@ export default function Page() {
                 <span>{features ? `${(features.monoFraction * 100).toFixed(1)}%` : "—"}</span>
               </div>
             </div>
-            <p className="note">{shapeNote(shape, features)}</p>
           </section>
 
           <section className="panel">
@@ -231,37 +187,40 @@ export default function Page() {
                   <span>{exposure(b)}</span>
                 </div>
               ))}
+              {loaded.failed.map((f) => (
+                <div key={f.deploymentId}>
+                  <span>{f.deploymentId}</span>
+                  <span>unsurveyed</span>
+                </div>
+              ))}
             </div>
-            {loaded.failed.length > 0 && (
-              <p className="note">
-                did not answer: {loaded.failed.map((f) => `${f.deploymentId} (${f.reason})`).join(", ")}
-              </p>
-            )}
           </section>
 
-          <section className="panel">
-            <h2>limits</h2>
-            <p className="note">
-              Two axes only: the price of one asset, and how long it has stayed there. Everything
-              else this wallet holds is held constant.
-              {loaded.offAxisCollateralUSD > 0 && (
-                <>
-                  {" "}
-                  <span className="badge warn">
-                    {usd(loaded.offAxisCollateralUSD)} off-axis collateral
-                  </span>
-                  Its own price moves are not on this map.
-                </>
-              )}
-            </p>
-          </section>
+          <p className="note">
+            Two axes only: the price of one asset, and how long it has stayed there. Everything
+            else this wallet holds is held constant.
+            {loaded.offAxisCollateralUSD > 0 &&
+              ` ${usd(loaded.offAxisCollateralUSD)} of off-axis collateral is not on this map.`}
+          </p>
+          <p className="note">
+            Scree reads public positions and never asks for a signature, an approval, or the
+            right to move anything.
+          </p>
+        </aside>
+      )}
+
+      {plate && (
+        <div className="plate-overlay" onClick={() => setPlate(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TerrainMap
+              baskets={loaded.baskets}
+              spot={SPOT_ETH_USD}
+              onFeatures={onFeatures}
+              onHover={onHover}
+            />
+          </div>
         </div>
-      </div>
-
-      <p className="note">
-        Scree reads public positions and never asks for a signature, an approval, or the right to
-        move anything.
-      </p>
+      )}
     </main>
   );
 }

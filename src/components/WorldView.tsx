@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Basket } from "@/core/types";
-import { rasterize, fittedWindow, colOfPrice, priceAt, dwellAt, sample } from "@/field/raster";
 import { bracket } from "@/core/bracket";
+import { rasterize, fittedWindow, colOfPrice, priceAt, dwellAt, sample } from "@/field/raster";
 import { extractFeatures } from "@/field/features";
-import { WORLD_H, WORLD_W, paintWorld } from "@/world/pixels";
+import { paintWorld, worldSizeFor, type WorldSize } from "@/world/pixels";
 import { SCATTER_ART, scatterWorld } from "@/world/scatter";
 import { findLandmarks } from "@/world/landmarks";
+import {
+  BANNER_COLOURS,
+  drawBanner,
+  drawJetty,
+  drawMenhirs,
+  drawTrack,
+} from "@/world/detail";
 import {
   FIGURE_PALETTE,
   HOLDFASTS,
@@ -26,37 +33,62 @@ export interface WorldReadout {
   binder: string | null;
 }
 
+export interface WorldMark {
+  id: string;
+  share: number;
+  leftPct: number;
+  topPct: number;
+}
+
 interface Props {
   baskets: Basket[];
   spot: number;
-  scale?: number;
   onHover?: (r: WorldReadout | null) => void;
   onFeatures?: (f: ReturnType<typeof extractFeatures>) => void;
-  /** HUD chrome, rendered over the world inside its own stacking context. */
   children?: React.ReactNode;
 }
 
-/** Field cell to world pixel. */
-function toWorld(col: number, row: number, fw: number, fh: number): { x: number; y: number } {
-  return {
-    x: Math.round((col / (fw - 1)) * (WORLD_W - 1)),
-    y: Math.round((1 - row / (fh - 1)) * (WORLD_H - 1)),
-  };
-}
+/** Pixels per world cell. Bigger reads as chunkier art and costs less to draw. */
+const SCALE = 4;
 
-export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, children }: Props) {
+export function WorldView({ baskets, spot, onHover, onFeatures, children }: Props) {
+  const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [size, setSize] = useState<WorldSize>(() => worldSizeFor(1.6));
 
-  // Framed to the book rather than to a fixed range, so a tight wallet reads as
-  // country instead of as open sea. The chosen range is printed on the axis.
+  // The grid follows the container's shape so a pixel stays square and the same
+  // size on screen however the window is resized.
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const measure = () => {
+      const rect = host.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return;
+      const next = worldSizeFor(rect.width / rect.height);
+      setSize((held) => (held.width === next.width && held.height === next.height ? held : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+
   const win = useMemo(() => {
     const br = bracket(baskets, 0);
     return fittedWindow(spot, br.lower, br.upper);
   }, [baskets, spot]);
   const raster = useMemo(() => rasterize(baskets, win), [baskets, win]);
   const features = useMemo(() => extractFeatures(raster), [raster]);
-  const paint = useMemo(() => paintWorld(raster), [raster]);
+  const paint = useMemo(() => paintWorld(raster, size), [raster, size]);
   const landmarks = useMemo(() => findLandmarks(raster), [raster]);
+
+  const toWorld = useCallback(
+    (col: number, row: number) => ({
+      x: Math.round((col / (win.width - 1)) * (paint.width - 1)),
+      y: Math.round((1 - row / (win.height - 1)) * (paint.height - 1)),
+    }),
+    [win, paint.width, paint.height],
+  );
 
   useEffect(() => {
     onFeatures?.(features);
@@ -68,51 +100,65 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    canvas.width = WORLD_W * scale;
-    canvas.height = WORLD_H * scale;
+    const { width: W, height: H } = paint;
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
 
     /* ── bake everything that never moves ─────────────────────────── */
     const stage = document.createElement("canvas");
-    stage.width = WORLD_W;
-    stage.height = WORLD_H;
+    stage.width = W;
+    stage.height = H;
     const sctx = stage.getContext("2d")!;
-    sctx.putImageData(
-      new ImageData(paint.image.data, paint.image.width, paint.image.height),
-      0,
-      0,
-    );
+    sctx.putImageData(new ImageData(paint.image.data, W, H), 0, 0);
 
     const holds = landmarks.map((mark, i) => {
       const art = HOLDFASTS[i % HOLDFASTS.length]!;
       const { w, h } = spriteSize(art);
-      const p = toWorld(mark.col, mark.row, win.width, win.height);
+      const p = toWorld(mark.col, mark.row);
       return {
-        mark,
         art,
-        x: Math.min(WORLD_W - w - 1, Math.max(1, p.x - Math.floor(w / 2))),
-        y: Math.min(WORLD_H - h - 1, Math.max(1, p.y - h)),
+        banner: BANNER_COLOURS[i % BANNER_COLOURS.length]!,
+        x: Math.min(W - w - 1, Math.max(1, p.x - Math.floor(w / 2))),
+        y: Math.min(H - h - 1, Math.max(1, p.y - h)),
         w,
         h,
+        anchor: p,
       };
     });
 
+    // Order matters: ground first, then things standing on it, near last.
+    drawTrack(
+      sctx,
+      paint,
+      holds.map((hold) => ({ x: hold.anchor.x, y: hold.anchor.y })),
+    );
+    for (const hold of holds) drawJetty(sctx, paint, hold.anchor.x, hold.y + hold.h);
+
     for (const item of scatterWorld(paint, holds)) {
-      blit(sctx, SCATTER_ART[item.kind]!, SCATTER_PALETTE, item.x, item.y);
+      const art = SCATTER_ART[item.kind]!;
+      sctx.fillStyle = "rgba(24,20,14,0.16)";
+      sctx.fillRect(item.x, item.y + art.length - 1, art[0]!.length, 1);
+      blit(sctx, art, SCATTER_PALETTE, item.x, item.y);
     }
+
+    if (features.pass && features.boundaryPass) {
+      const p = toWorld(features.pass.column, features.pass.row);
+      drawMenhirs(sctx, p.x, Math.min(H - 6, Math.max(6, p.y)));
+    }
+
     for (const hold of holds) {
-      // A short shadow anchors the building to the ground it stands on.
-      sctx.fillStyle = "rgba(30,26,20,0.24)";
+      sctx.fillStyle = "rgba(24,20,14,0.26)";
       sctx.fillRect(hold.x + 1, hold.y + hold.h - 1, hold.w - 2, 2);
       blit(sctx, hold.art, HOLDFAST_PALETTE, hold.x, hold.y);
+      drawBanner(sctx, hold.x + hold.w - 3, hold.y + 1, hold.banner);
     }
 
-    const baked = sctx.getImageData(0, 0, WORLD_W, WORLD_H);
+    const baked = sctx.getImageData(0, 0, W, H);
 
     /* ── where you stand ──────────────────────────────────────────── */
-    const liveCol = colOfPrice(win, spot);
-    const live = toWorld(Math.round(liveCol), 0, win.width, win.height);
-    const figureX = Math.min(WORLD_W - 8, Math.max(2, live.x - 3));
-    const figureY = Math.min(WORLD_H - 12, Math.max(12, live.y - 10));
+    const live = toWorld(Math.round(colOfPrice(win, spot)), 0);
+    const figureX = Math.min(W - 9, Math.max(2, live.x - 3));
+    const figureY = Math.min(H - 12, Math.max(14, live.y - 10));
 
     let raf = 0;
     let start = 0;
@@ -121,20 +167,16 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
       if (!start) start = now;
       const t = (now - start) / 1000;
 
-      const buffer = new ImageData(
-        new Uint8ClampedArray(baked.data),
-        baked.width,
-        baked.height,
-      );
-
-      // Water glints. Two crossing swells, so the surface never visibly repeats.
+      const buffer = new ImageData(new Uint8ClampedArray(baked.data), W, H);
       const d = buffer.data;
-      for (let y = 0; y < WORLD_H; y++) {
-        for (let x = 0; x < WORLD_W; x++) {
-          const i = y * WORLD_W + x;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x;
           if (!paint.wet[i]) continue;
           const s =
-            Math.sin(x * 0.31 + t * 1.1) + Math.sin(y * 0.44 - t * 0.8) + Math.sin((x + y) * 0.19 + t * 1.6);
+            Math.sin(x * 0.31 + t * 1.1) +
+            Math.sin(y * 0.44 - t * 0.8) +
+            Math.sin((x + y) * 0.19 + t * 1.6);
           if (s > 2.35) {
             const o = i * 4;
             d[o] = Math.min(255, d[o]! + 46);
@@ -145,19 +187,17 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
       }
       sctx.putImageData(buffer, 0, 0);
 
-      // The staff, then the figure over it, so the hand reads as holding it.
       drawStaff(sctx, figureX + 7, figureY + 10, 14);
-      const breathing = Math.floor(t / 1.4) % 2;
-      blit(sctx, SURVEYOR[breathing]!, FIGURE_PALETTE, figureX, figureY);
+      blit(sctx, SURVEYOR[Math.floor(t / 1.4) % 2]!, FIGURE_PALETTE, figureX, figureY);
 
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(stage, 0, 0, WORLD_W * scale, WORLD_H * scale);
+      ctx.drawImage(stage, 0, 0, W * SCALE, H * SCALE);
       raf = requestAnimationFrame(frame);
     };
 
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [paint, landmarks, raster, win, spot, scale]);
+  }, [paint, landmarks, features, win, spot, toWorld]);
 
   function move(event: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
@@ -171,57 +211,39 @@ export function WorldView({ baskets, spot, scale = 4, onHover, onFeatures, child
     onHover?.({ price, dwellDays, z: s.z, binder: s.binder });
   }
 
-  // The hud owns the top strip and the right column. A label that would land
-  // under it is pushed down rather than drawn through it.
-  const HUD_TOP = 0.34;
-  const HUD_RIGHT = 0.62;
+  // The hud owns the top strip and the right column; a name that would land
+  // under it is pushed clear rather than drawn through it.
+  const place = (x: number, y: number, nudge: number) => {
+    let fx = x / paint.width;
+    let fy = y / paint.height;
+    if (fy < 0.3 && fx > 0.6) fy = 0.3 + nudge;
+    return { left: `${fx * 100}%`, top: `${Math.min(0.9, Math.max(0.14, fy)) * 100}%` };
+  };
 
-  const holdLabels = landmarks.map((mark, i) => {
-    const p = toWorld(mark.col, mark.row, win.width, win.height);
-    let fx = p.x / WORLD_W;
-    let fy = p.y / WORLD_H;
-    if (fy < HUD_TOP && fx > HUD_RIGHT) fy = HUD_TOP + 0.06 * (i + 1);
-    return {
-      id: mark.deploymentId,
-      share: mark.share,
-      left: `${fx * 100}%`,
-      top: `${Math.min(0.94, Math.max(0.16, fy)) * 100}%`,
-      order: i,
-    };
-  });
-
-  const passSpot = features.pass
-    ? toWorld(features.pass.column, features.pass.row, win.width, win.height)
-    : null;
-  const passTop =
-    passSpot && passSpot.y / WORLD_H < HUD_TOP && passSpot.x / WORLD_W > HUD_RIGHT
-      ? HUD_TOP + 0.24
-      : passSpot
-        ? passSpot.y / WORLD_H
-        : 0;
+  const passSpot =
+    features.pass && features.boundaryPass
+      ? toWorld(features.pass.column, features.pass.row)
+      : null;
 
   return (
-    <div className="world">
+    <div className="world" ref={hostRef}>
       <canvas
         ref={canvasRef}
         className="world-canvas"
         onMouseMove={move}
         onMouseLeave={() => onHover?.(null)}
       />
-      {holdLabels.map((label) => (
-        <span key={label.id} className="holdfast-name" style={{ left: label.left, top: label.top }}>
-          {label.id}
-          <em>{(label.share * 100).toFixed(0)}% of the ground</em>
-        </span>
-      ))}
-      {features.pass && features.boundaryPass && passSpot ? (
-        <span
-          className="pass-name"
-          style={{
-            left: `${(passSpot.x / WORLD_W) * 100}%`,
-            top: `${Math.min(0.9, Math.max(0.16, passTop)) * 100}%`,
-          }}
-        >
+      {landmarks.map((mark, i) => {
+        const p = toWorld(mark.col, mark.row);
+        return (
+          <span key={mark.deploymentId} className="holdfast-name" style={place(p.x, p.y, 0.07 * (i + 1))}>
+            {mark.deploymentId}
+            <em>{(mark.share * 100).toFixed(0)}% of the ground</em>
+          </span>
+        );
+      })}
+      {passSpot && features.pass ? (
+        <span className="pass-name" style={place(passSpot.x, passSpot.y, 0.3)}>
           THE PASS
           <em>
             ${Math.round(features.pass.price).toLocaleString("en-US")} · held{" "}

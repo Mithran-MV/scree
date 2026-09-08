@@ -1,8 +1,15 @@
 import type { WorldPaint } from "./pixels";
-import { WORLD_H, WORLD_W } from "./pixels";
-import { BOULDER, BROADLEAF, FLOWERS, PINE, REEDS } from "./sprites";
+import { BOULDER, BROADLEAF, BUSH, CAIRN, FLOWERS, PINE, REEDS, STUMP } from "./sprites";
 
-export type ScatterKind = "pine" | "broadleaf" | "boulder" | "flowers" | "reeds";
+export type ScatterKind =
+  | "pine"
+  | "broadleaf"
+  | "boulder"
+  | "flowers"
+  | "reeds"
+  | "bush"
+  | "cairn"
+  | "stump";
 
 export interface ScatterItem {
   kind: ScatterKind;
@@ -16,6 +23,9 @@ export const SCATTER_ART: Record<ScatterKind, string[]> = {
   boulder: BOULDER,
   flowers: FLOWERS,
   reeds: REEDS,
+  bush: BUSH,
+  cairn: CAIRN,
+  stump: STUMP,
 };
 
 /** Deterministic hash. Never Math.random: the world must not reshuffle on a repaint. */
@@ -34,18 +44,22 @@ function hash(x: number, y: number, salt: number): number {
  * reading of the same elevation the biomes came from, and a wallet whose ground
  * is mostly drowned genuinely has less growing on it.
  */
-export function scatterWorld(paint: WorldPaint, keepOut: ReadonlyArray<{ x: number; y: number; w: number; h: number }>): ScatterItem[] {
+export function scatterWorld(
+  paint: WorldPaint,
+  keepOut: ReadonlyArray<{ x: number; y: number; w: number; h: number }>,
+): ScatterItem[] {
+  const { width: W, height: H } = paint;
   const items: ScatterItem[] = [];
-  const step = 6;
+  const step = 5;
 
-  for (let gy = 2; gy < WORLD_H - 6; gy += step) {
-    for (let gx = 2; gx < WORLD_W - 6; gx += step) {
+  for (let gy = 2; gy < H - 6; gy += step) {
+    for (let gx = 2; gx < W - 6; gx += step) {
       const jitter = hash(gx, gy, 1);
-      if (jitter > 0.62) continue; // thin it out, or the world reads as a lawn
+      if (jitter > 0.74) continue; // thin it out, or the world reads as a lawn
 
       const x = gx + Math.floor(hash(gx, gy, 2) * (step - 1));
       const y = gy + Math.floor(hash(gx, gy, 3) * (step - 1));
-      const i = y * WORLD_W + x;
+      const i = y * W + x;
       if (paint.wet[i]) continue;
 
       if (keepOut.some((r) => x >= r.x - 2 && x < r.x + r.w + 2 && y >= r.y - 2 && y < r.y + r.h + 2)) {
@@ -55,12 +69,16 @@ export function scatterWorld(paint: WorldPaint, keepOut: ReadonlyArray<{ x: numb
       const height = Math.min(1, Math.max(0, paint.elevation[i]! / paint.ceiling));
       const nearWater = isNearWater(paint, x, y, 3);
 
+      // What grows where. Each band mixes two or three species on a hash so the
+      // cover reads as country rather than as a planted grid.
+      const pick = hash(x, y, 4);
       let kind: ScatterKind;
-      if (nearWater) kind = "reeds";
-      else if (height > 0.82) kind = "boulder";
-      else if (height > 0.5) kind = "pine";
-      else if (height > 0.22) kind = hash(x, y, 4) > 0.45 ? "broadleaf" : "pine";
-      else kind = hash(x, y, 5) > 0.4 ? "flowers" : "broadleaf";
+      if (nearWater) kind = pick > 0.7 ? "bush" : "reeds";
+      else if (height > 0.9) kind = pick > 0.62 ? "cairn" : "boulder";
+      else if (height > 0.74) kind = pick > 0.5 ? "boulder" : "pine";
+      else if (height > 0.48) kind = pick > 0.82 ? "stump" : "pine";
+      else if (height > 0.24) kind = pick > 0.55 ? "broadleaf" : pick > 0.3 ? "pine" : "bush";
+      else kind = pick > 0.62 ? "flowers" : pick > 0.34 ? "bush" : "broadleaf";
 
       items.push({ kind, x, y });
     }
@@ -71,12 +89,13 @@ export function scatterWorld(paint: WorldPaint, keepOut: ReadonlyArray<{ x: numb
 }
 
 function isNearWater(paint: WorldPaint, x: number, y: number, radius: number): boolean {
+  const { width: W, height: H } = paint;
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
       const nx = x + dx;
       const ny = y + dy;
-      if (nx < 0 || nx >= WORLD_W || ny < 0 || ny >= WORLD_H) continue;
-      if (paint.wet[ny * WORLD_W + nx]) return true;
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      if (paint.wet[ny * W + nx]) return true;
     }
   }
   return false;

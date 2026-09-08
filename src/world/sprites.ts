@@ -172,3 +172,15 @@ export function drawStaff(ctx: Ctx, x: number, footY: number, heightPx: number):
   ctx.fillStyle = FIGURE.a!;
   ctx.fillRect(x - 1, top - 2, 3, 2);
 }
+
+/* ── more of the country ─────────────────────────────────────────────── */
+
+export const BUSH = [".mm..", "mlllm", "mlllm", ".mm.."];
+export const STUMP = [".....", ".bbb.", "bmmmb", ".bbb."];
+export const CAIRN = ["..s..", ".srs.", ".rrs.", "srrrs", ".sss."];
+
+/** A jetty running out from the shore, for the settlements on the water. */
+export const JETTY = ["bb", "bb", "bb", "bb", "bb"];
+
+/** Standing stones, planted only where the map has a genuine saddle. */
+export const MENHIR = [".s.", "srs", "srs", "srs", "sss"];

@@ -18,9 +18,27 @@ import { LAND_BANDS, SEA_BANDS, rampAt } from "./biome";
  * are what separate pixel art from a downscaled photograph.
  */
 
-/** Internal resolution. Everything is drawn here, then scaled up hard. */
-export const WORLD_W = 288;
-export const WORLD_H = 192;
+/**
+ * Internal resolution.
+ *
+ * Height is fixed and width follows the viewport, so the pixel size on screen
+ * stays constant as the window changes shape. Scaling a fixed grid to fit
+ * instead would make the pixels themselves stretch, which is the one thing the
+ * style cannot survive.
+ */
+export const WORLD_H = 200;
+export const DEFAULT_WORLD_W = 320;
+
+export interface WorldSize {
+  width: number;
+  height: number;
+}
+
+/** World grid for a container of a given aspect ratio. */
+export function worldSizeFor(aspect: number): WorldSize {
+  const width = Math.round(WORLD_H * Math.min(3.2, Math.max(1.1, aspect)));
+  return { width, height: WORLD_H };
+}
 
 /** Bayer 4x4, the classic ordered-dither threshold matrix. */
 const BAYER = [
@@ -47,6 +65,8 @@ function ditheredStep(t: number, steps: number, x: number, y: number): number {
 }
 
 export interface WorldPaint {
+  width: number;
+  height: number;
   image: ImageDataLike;
   /** Elevation sampled per pixel, so sprites can sit on the ground. */
   elevation: Float32Array;
@@ -56,7 +76,8 @@ export interface WorldPaint {
   seaDatum: number;
 }
 
-export function paintWorld(r: Raster): WorldPaint {
+export function paintWorld(r: Raster, size: WorldSize): WorldPaint {
+  const { width: W, height: H } = size;
   const { width: fw, height: fh } = r.window;
   const ceiling = Math.max(0.05, r.range.max);
   const seaDatum = seaDatumFor(r.range.min);
@@ -75,16 +96,16 @@ export function paintWorld(r: Raster): WorldPaint {
     }
   }
 
-  const data = new Uint8ClampedArray(new ArrayBuffer(WORLD_W * WORLD_H * 4));
-  const elevation = new Float32Array(WORLD_W * WORLD_H);
-  const wet = new Uint8Array(WORLD_W * WORLD_H);
+  const data = new Uint8ClampedArray(new ArrayBuffer(W * H * 4));
+  const elevation = new Float32Array(W * H);
+  const wet = new Uint8Array(W * H);
 
-  for (let py = 0; py < WORLD_H; py++) {
+  for (let py = 0; py < H; py++) {
     // Screen y grows downward; dwell grows upward. The far edge of the world is
     // the long dwell, which is where the viewer is looking into.
-    const v = (1 - py / (WORLD_H - 1)) * (fh - 1);
-    for (let px = 0; px < WORLD_W; px++) {
-      const u = (px / (WORLD_W - 1)) * (fw - 1);
+    const v = (1 - py / (H - 1)) * (fh - 1);
+    for (let px = 0; px < W; px++) {
+      const u = (px / (W - 1)) * (fw - 1);
       const col = Math.round(u);
       const row = Math.round(v);
       const at = row * fw + col;
@@ -92,7 +113,7 @@ export function paintWorld(r: Raster): WorldPaint {
       const z = Number.isFinite(raw) ? raw : ceiling;
       const steepness = Math.min(1, slope[at]! / steepest);
 
-      const i = py * WORLD_W + px;
+      const i = py * W + px;
       elevation[i] = z;
       wet[i] = z < 0 ? 1 : 0;
 
@@ -120,9 +141,17 @@ export function paintWorld(r: Raster): WorldPaint {
     }
   }
 
-  drawSurf(data, elevation, wet);
+  drawSurf(data, wet, W, H);
 
-  return { image: { width: WORLD_W, height: WORLD_H, data }, elevation, wet, ceiling, seaDatum };
+  return {
+    width: W,
+    height: H,
+    image: { width: W, height: H, data },
+    elevation,
+    wet,
+    ceiling,
+    seaDatum,
+  };
 }
 
 /**
@@ -132,13 +161,13 @@ export function paintWorld(r: Raster): WorldPaint {
  * event rather than a reading. A bright two-pixel lip makes it the first thing
  * the eye finds, which is exactly the right priority.
  */
-function drawSurf(data: Uint8ClampedArray, elevation: Float32Array, wet: Uint8Array): void {
+function drawSurf(data: Uint8ClampedArray, wet: Uint8Array, W: number, H: number): void {
   const foam = { r: 226, g: 244, b: 240 };
   const damp = { r: 176, g: 208, b: 202 };
 
-  for (let py = 0; py < WORLD_H; py++) {
-    for (let px = 0; px < WORLD_W; px++) {
-      const i = py * WORLD_W + px;
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const i = py * W + px;
       if (!wet[i]) continue;
       let shore = false;
       for (const [dx, dy] of [
@@ -149,8 +178,8 @@ function drawSurf(data: Uint8ClampedArray, elevation: Float32Array, wet: Uint8Ar
       ] as const) {
         const nx = px + dx;
         const ny = py + dy;
-        if (nx < 0 || nx >= WORLD_W || ny < 0 || ny >= WORLD_H) continue;
-        if (!wet[ny * WORLD_W + nx]) shore = true;
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+        if (!wet[ny * W + nx]) shore = true;
       }
       if (!shore) continue;
       // Break the lip on the dither lattice so it reads as surf, not an outline.
@@ -162,5 +191,4 @@ function drawSurf(data: Uint8ClampedArray, elevation: Float32Array, wet: Uint8Ar
       data[o + 2] = c.b;
     }
   }
-  void elevation;
 }
