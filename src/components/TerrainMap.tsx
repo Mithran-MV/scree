@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Basket } from "@/core/types";
-import { rasterize, renderWindow, priceAt, dwellAt, colOfPrice } from "@/field/raster";
+import { rasterize, renderWindow, priceAt, dwellAt, colOfPrice, sample } from "@/field/raster";
 import { extractFeatures } from "@/field/features";
-import { hillshade } from "@/render/hillshade";
-import { contourSet } from "@/render/contours";
+import { contourSet, niceInterval } from "@/render/contours";
 import { foldPaths, ridgePath } from "@/render/overlays";
-import { sample } from "@/field/raster";
+import { wash } from "@/render/wash";
+import { drawHachures, hachureSeeds } from "@/render/hachure";
+import { dotSegments } from "@/render/dots";
+import { drawSurveyor } from "@/render/surveyor";
+import { exaggerationFor, gradientAt } from "@/render/hillshade";
+import { ALPHA_BUDGET, REGISTERS, SHEET, TYPE } from "@/render/theme";
 
 export interface Readout {
   price: number;
@@ -16,16 +20,30 @@ export interface Readout {
   binder: string | null;
 }
 
+export interface PlateFacts {
+  exaggeration: number;
+  interval: number;
+  ceiling: number;
+  combGain: number;
+  cullDeg: number;
+  strokes: number;
+}
+
 interface Props {
   baskets: Basket[];
   spot: number;
   onFeatures?: (f: ReturnType<typeof extractFeatures>) => void;
   onHover?: (r: Readout | null) => void;
+  onPlate?: (f: PlateFacts) => void;
 }
 
 const SIZE = 512;
 
-export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
+function css(c: { r: number; g: number; b: number }, alpha = 1): string {
+  return `rgba(${c.r},${c.g},${c.b},${alpha})`;
+}
+
+export function TerrainMap({ baskets, spot, onFeatures, onHover, onPlate }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<Readout | null>(null);
 
@@ -36,6 +54,7 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
   // shading and the contours each used to default it independently, so they
   // agreed only by coincidence and would have drifted apart silently.
   const ceiling = useMemo(() => Math.max(0.05, raster.range.max), [raster]);
+  const interval = useMemo(() => niceInterval(ceiling, 14), [ceiling]);
 
   useEffect(() => {
     onFeatures?.(features);
@@ -47,111 +66,136 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const shaded = hillshade(raster, { ceiling });
-    const image = new ImageData(shaded.data, shaded.width, shaded.height);
-
-    // The raster is computed at a modest resolution and scaled up for display.
-    // Recomputing at display resolution buys nothing: the terrain is smooth
-    // between samples and the counters are measured on the raster, not on the
-    // picture, so scaling cannot change a reported number.
-    const staging = document.createElement("canvas");
-    staging.width = shaded.width;
-    staging.height = shaded.height;
-    staging.getContext("2d")!.putImageData(image, 0, 0);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = SIZE * dpr;
+    canvas.height = SIZE * dpr;
+    canvas.style.width = `${SIZE}px`;
+    canvas.style.height = `${SIZE}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const sx = SIZE / (win.width - 1);
     const sy = SIZE / (win.height - 1);
     const toScreen = (x: number, y: number): [number, number] => [x * sx, SIZE - y * sy];
 
-    canvas.width = SIZE;
-    canvas.height = SIZE;
-    ctx.imageSmoothingEnabled = true;
-    ctx.save();
-    // Raster row 0 is dwell zero, which belongs at the bottom of the map.
-    ctx.translate(0, SIZE);
-    ctx.scale(1, -1);
-    // Register the bitmap so sample centres land exactly where `toScreen` puts
-    // them. Drawn flush to the box instead, every sample sits half a cell off
-    // its own coordinate — invisible under a 0.7px hairline, and glaring the
-    // moment the shoreline is drawn heavy.
-    ctx.drawImage(
-      staging,
-      -sx / 2,
-      -sy / 2,
-      (SIZE * win.width) / (win.width - 1),
-      (SIZE * win.height) / (win.height - 1),
+    /* ── the wash and the sea ruling ─────────────────────────────── */
+    const painted = wash(raster, { size: SIZE, dpr, ceiling });
+    const staging = document.createElement("canvas");
+    staging.width = painted.width;
+    staging.height = painted.height;
+    staging.getContext("2d")!.putImageData(
+      new ImageData(painted.data, painted.width, painted.height),
+      0,
+      0,
     );
-    ctx.restore();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(staging, 0, 0, SIZE, SIZE);
+    ctx.imageSmoothingEnabled = true;
 
-    for (const line of contourSet(raster, undefined, ceiling)) {
-      const shoreline = line.level === 0;
-      ctx.strokeStyle = shoreline ? "rgba(20,32,48,0.85)" : "rgba(40,50,40,0.22)";
-      ctx.lineWidth = shoreline ? 1.6 : 0.7;
-      ctx.beginPath();
-      for (const s of line.segments) {
-        const [x1, y1] = toScreen(s.x1, s.y1);
-        const [x2, y2] = toScreen(s.x2, s.y2);
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-      }
-      ctx.stroke();
+    /* ── the comb ────────────────────────────────────────────────── */
+    const comb = hachureSeeds(raster, { size: SIZE, interval });
+    drawHachures(ctx, comb.seeds, css(SHEET.ink));
+
+    /* ── contours, in four registers ─────────────────────────────── */
+    for (const line of contourSet(raster, interval, ceiling)) {
+      const isShore = line.level === 0;
+      const isIndex = !isShore && Math.abs(Math.round(line.level / interval)) % 5 === 0;
+      const reg = isShore
+        ? REGISTERS.shore
+        : line.level < 0
+          ? REGISTERS.bathymetric
+          : isIndex
+            ? REGISTERS.index
+            : REGISTERS.intermediate;
+
+      const stroke = (width: number, alpha: number) => {
+        ctx.strokeStyle = css(reg.color, alpha);
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        for (const s of line.segments) {
+          const [x1, y1] = toScreen(s.x1, s.y1);
+          const [x2, y2] = toScreen(s.x2, s.y2);
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+        }
+        ctx.stroke();
+      };
+
+      // A heavy line bleeds into paper. Cosmetic only; it carries no weight.
+      if (reg.bleed) stroke(reg.bleed.width, reg.bleed.alpha);
+      stroke(reg.width, reg.alpha);
     }
 
-    // Fold lines: where the deployment closest to killing you hands over. These
-    // are drawn from the argmin partition, so a map with no handover has no
-    // lines to draw and cannot pretend otherwise.
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = "rgba(30,40,60,0.55)";
-    ctx.lineWidth = 1;
+    /* ── fold lines ──────────────────────────────────────────────── */
+    // Where the deployment closest to killing you hands over. Drawn from the
+    // argmin partition, so a map with no handover has no lines to draw and
+    // cannot pretend otherwise.
+    ctx.fillStyle = css(SHEET.ink, ALPHA_BUDGET.fold);
     for (const fold of foldPaths(raster)) {
-      ctx.beginPath();
-      fold.points.forEach((p, i) => {
-        const [x, y] = toScreen(p.col, p.row);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      const segments = [];
+      for (let i = 1; i < fold.points.length; i++) {
+        const a = fold.points[i - 1]!;
+        const b = fold.points[i]!;
+        segments.push({ x1: a.col, y1: a.row, x2: b.col, y2: b.row });
+      }
+      dotSegments(ctx, segments, toScreen, { step: 3.6, size: 1.3 });
     }
-    ctx.setLineDash([]);
 
-    // The ridge, traced row by row rather than assumed vertical.
+    /* ── the ridge, demoted to a dotted rule ─────────────────────── */
     if (features.boundaryPass) {
       const ridge = ridgePath(raster);
-      ctx.strokeStyle = "rgba(182,82,42,0.9)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ridge.forEach((p, i) => {
-        const [x, y] = toScreen(p.col, p.row);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      const segments = [];
+      for (let i = 1; i < ridge.length; i++) {
+        const a = ridge[i - 1]!;
+        const b = ridge[i]!;
+        segments.push({ x1: a.col, y1: a.row, x2: b.col, y2: b.row });
+      }
+      ctx.fillStyle = css(SHEET.ink, 0.5);
+      dotSegments(ctx, segments, toScreen, { step: 5, size: 1.1 });
     }
 
-    // Where you are now: today's price, no dwell.
-    const [bx, by] = toScreen(colOfPrice(win, spot), 0);
-    ctx.beginPath();
-    ctx.arc(bx, Math.min(by, SIZE - 7), 5.5, 0, Math.PI * 2);
-    ctx.fillStyle = "#1d7a3e";
-    ctx.strokeStyle = "#fffdf8";
-    ctx.lineWidth = 2;
-    ctx.fill();
-    ctx.stroke();
-
-    // The pass, only when it is a genuine one with drowned ground on both sides.
+    /* ── the pass, and it never appears without its numbers ──────── */
     if (features.pass && features.boundaryPass) {
-      const [px, py] = toScreen(features.pass.column, features.pass.row);
+      const p = features.pass;
+      const [px, py] = toScreen(p.column, p.row);
+      ctx.strokeStyle = css(SHEET.accent, 0.95);
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(px - 7, py);
-      ctx.lineTo(px, py - 7);
-      ctx.lineTo(px + 7, py);
-      ctx.lineTo(px, py + 7);
+      ctx.moveTo(px - 6, py);
+      ctx.lineTo(px, py - 6);
+      ctx.lineTo(px + 6, py);
+      ctx.lineTo(px, py + 6);
       ctx.closePath();
-      ctx.strokeStyle = "#b6522a";
-      ctx.lineWidth = 2;
       ctx.stroke();
+
+      const spec = TYPE.passReadout!;
+      ctx.font = `${spec.size}px var(--mono), ui-monospace, monospace`;
+      ctx.fillStyle = css(spec.color, 1);
+      ctx.textAlign = "center";
+      const label = `THE PASS  z ${p.elevation >= 0 ? "+" : ""}${p.elevation.toFixed(4)}`;
+      const sub = `$${Math.round(p.price).toLocaleString("en-US")} · held ${fmtDays(p.dwellDays)}`;
+      ctx.fillText(label, clampX(px, SIZE), Math.max(spec.size + 2, py - 12));
+      ctx.fillText(sub, clampX(px, SIZE), Math.max(spec.size * 2 + 4, py - 12 + spec.size + 2));
+      ctx.textAlign = "start";
     }
-  }, [raster, features, win, spot, ceiling]);
+
+    /* ── where you are ───────────────────────────────────────────── */
+    const liveCol = colOfPrice(win, spot);
+    const [bx, by] = toScreen(liveCol, 0);
+    const exaggeration = exaggerationFor(raster);
+    const g = gradientAt(raster, Math.round(liveCol), 0, exaggeration);
+    const perPixel = Math.hypot(g.dzdx / sx, g.dzdy / sy);
+    const staffPx = Math.min(34, Math.max(10, interval / Math.max(perPixel, 1e-6)));
+    drawSurveyor(ctx, { x: bx, y: Math.min(by, SIZE - 2), staffPx, intervals: 1 });
+
+    onPlate?.({
+      exaggeration,
+      interval,
+      ceiling,
+      combGain: comb.gain,
+      cullDeg: comb.cullDeg,
+      strokes: comb.seeds.length,
+    });
+  }, [raster, features, win, spot, ceiling, interval, onPlate]);
 
   function move(event: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
@@ -186,6 +230,10 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
       </div>
     </div>
   );
+}
+
+function clampX(x: number, size: number): number {
+  return Math.min(size - 62, Math.max(62, x));
 }
 
 function fmtUsd(x: number): string {

@@ -206,6 +206,10 @@ export function hachureSeeds(r: Raster, opts: HachureOptions): Comb {
   return { seeds, gain, cullDeg };
 }
 
+/**
+ * The slice of a 2D context this module touches, kept narrow so the drawing
+ * path is exercisable from a test with a counting stub and no DOM.
+ */
 type Ctx = {
   beginPath(): void;
   moveTo(x: number, y: number): void;
@@ -213,7 +217,7 @@ type Ctx = {
   closePath(): void;
   fill(): void;
   globalAlpha: number;
-  fillStyle: string;
+  fillStyle: string | CanvasGradient | CanvasPattern;
 };
 
 /**
