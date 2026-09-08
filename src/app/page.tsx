@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { TerrainMap, type Readout } from "@/components/TerrainMap";
-import { WorldView } from "@/components/WorldView";
+import { ArcaneMap, type ChartReadout } from "@/components/ArcaneMap";
+import { TerrainMap } from "@/components/TerrainMap";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import { bracket } from "@/core/bracket";
 import { exposure, walletShape } from "@/core/kernel";
@@ -25,7 +25,7 @@ const DEMO: Loaded = {
   offAxisCollateralUSD: 0.153 * 110_000,
 };
 
-/** The world's name follows the shape of the book standing on it. */
+/** The chart's name follows the shape of the book standing on it. */
 function placeName(shape: WalletShape): string {
   if (shape === "MIXED") return "The Saddle Lands";
   if (shape === "LONG-ONLY") return "The Long Fall";
@@ -39,7 +39,8 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [features, setFeatures] = useState<Features | null>(null);
-  const [hover, setHover] = useState<Readout | null>(null);
+  const [hover, setHover] = useState<ChartReadout | null>(null);
+  const [gate, setGate] = useState(true);
   const [dash, setDash] = useState(false);
   const [plate, setPlate] = useState(false);
 
@@ -47,7 +48,7 @@ export default function Page() {
   const br = useMemo(() => bracket(loaded.baskets, 0), [loaded.baskets]);
 
   const onFeatures = useCallback((f: Features) => setFeatures(f), []);
-  const onHover = useCallback((r: Readout | null) => setHover(r), []);
+  const onHover = useCallback((r: ChartReadout | null) => setHover(r), []);
 
   async function load() {
     setBusy(true);
@@ -70,6 +71,7 @@ export default function Page() {
         failed: body.failed ?? [],
         offAxisCollateralUSD: body.offAxisCollateralUSD ?? 0,
       });
+      setGate(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -79,132 +81,155 @@ export default function Page() {
 
   return (
     <main className="stage">
-      <WorldView
+      <ArcaneMap
         baskets={loaded.baskets}
         spot={SPOT_ETH_USD}
         onFeatures={onFeatures}
         onHover={onHover}
       >
-        <div className="hud hud-brand">
-          <p className="wordmark">SCREE</p>
-          <div className="eyebrow">the ground you borrow on</div>
-          <h2>{placeName(shape)}</h2>
-          <p>
-            High ground is safe and the shoreline is liquidation. West and east is the price
-            of your collateral; north is how long it has stayed there.
-          </p>
-        </div>
+        <section className="hud brass cartouche">
+          <h1>The Scree Survey — Liquidation Topography</h1>
+          <div className="rule" />
+          <p>A living chart of where your book dies, and how long price must stay there to kill it. Sculpt your defence on the ground itself.</p>
+          <div className="place">{placeName(shape)}</div>
+        </section>
 
-        <div className="hud hud-bar">
+        <div className="hud rail">
           <input
+            className="rune-input"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !busy && load()}
-            placeholder="0x… survey any address"
+            placeholder="0x… paste an address"
             spellCheck={false}
           />
-          <button className="hud-btn" onClick={load} disabled={busy || address.trim().length === 0}>
-            {busy ? "reading…" : "Survey"}
+          <button className="rune-btn" onClick={load} disabled={busy || address.trim().length === 0}>
+            {busy ? "Reading" : "Survey"}
           </button>
-          <button className="hud-btn" onClick={() => setDash((open) => !open)}>
-            Dashboard
-          </button>
-          <button className="hud-btn primary" disabled title="not wired up yet">
+          <button className="rune-btn" onClick={() => setDash((open) => !open)}>Ledger</button>
+          <button className="rune-btn warded" disabled title="not wired up yet">
             Connect wallet
           </button>
         </div>
 
-        {error && <div className="hud hud-error">{error}</div>}
+        {error && <div className="hud brass alarum">{error}</div>}
 
         {!dash && (
-          <div className="hud hud-feed">
-            <h3>live feed</h3>
-            <ul>
-              <li><b>ETH</b><span>{usd(SPOT_ETH_USD)}</span></li>
-              <li className="alarm"><b>crash liquidation</b><span>{usd(br.lower)}</span></li>
-              <li className="alarm"><b>pump liquidation</b><span>{usd(br.upper)}</span></li>
-              <li><b>holdfasts</b><span>{features?.binders.length ?? "—"}</span></li>
-              <li><b>drowned basins</b><span>{features?.basins ?? "—"}</span></li>
-              <li><b>passes</b><span>{features?.boundaryPass ? 1 : 0}</span></li>
-            </ul>
-          </div>
+          <section className="hud brass ledger">
+            <h2>Live feed</h2>
+            <dl>
+              <div className="row"><dt>ETH</dt><dd>{usd(SPOT_ETH_USD)}</dd></div>
+              <div className="row peril"><dt>crash liquidation</dt><dd>{usd(br.lower)}</dd></div>
+              <div className="row peril"><dt>pump liquidation</dt><dd>{usd(br.upper)}</dd></div>
+
+              <div className="section">Measured on the chart</div>
+              <div className="row"><dt>citadels</dt><dd>{features?.binders.length ?? "—"}</dd></div>
+              <div className="row"><dt>ley-veins</dt><dd>{features?.foldLines8 ?? "—"}</dd></div>
+              <div className="row"><dt>drowned basins</dt><dd>{features?.basins ?? "—"}</dd></div>
+              <div className="row aether"><dt>passes</dt><dd>{features?.boundaryPass ? 1 : 0}</dd></div>
+              <div className="row">
+                <dt>rises with price</dt>
+                <dd>{features ? `${(features.monoFraction * 100).toFixed(1)}%` : "—"}</dd>
+              </div>
+            </dl>
+          </section>
         )}
 
-        <div className="hud hud-legend">
+        <div className="hud brass readout">
           {hover ? (
             <>
-              <span>{usd(hover.price)} · held {days(hover.dwellDays)}</span>
-              <span>health {(hover.z + 1).toFixed(3)} · {hover.binder ?? "nothing binds"}</span>
+              {usd(hover.price)} · held {days(hover.dwellDays)} · health{" "}
+              {(hover.z + 1).toFixed(3)} · {hover.binder ?? "nothing binds"}
             </>
           ) : (
-            <span>move over the ground to read it</span>
+            <span className="dim">move over the ground to read it</span>
           )}
         </div>
 
-        <div className="hud hud-cta">
-          <button className="hud-btn" onClick={() => setLoaded(DEMO)}>Reference book</button>
-          <button className="hud-btn primary" onClick={() => setPlate(true)}>Survey plate</button>
+        <div className="hud foot-rail">
+          <button className="rune-btn" onClick={() => { setLoaded(DEMO); setError(null); }}>
+            Reference book
+          </button>
+          <button className="rune-btn warded" onClick={() => setPlate(true)}>Survey plate</button>
         </div>
-      </WorldView>
+      </ArcaneMap>
+
+      {gate && (
+        <div className="gate">
+          <section className="brass panel">
+            <h1>The Scree Survey</h1>
+            <p className="sub">Paste an address to begin the survey.</p>
+            <div className="field">
+              <input
+                className="rune-input"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !busy && load()}
+                placeholder="0x…"
+                spellCheck={false}
+                autoFocus
+              />
+              <button className="rune-btn" onClick={load} disabled={busy || address.trim().length === 0}>
+                {busy ? "Reading" : "Begin survey"}
+              </button>
+            </div>
+            {error && <p className="aside" style={{ color: "#ffb49a" }}>{error}</p>}
+            <p className="aside">
+              No wallet, no signature, no gas. Scree reads public positions only and never asks
+              for the right to move anything.
+              <br />
+              <button
+                className="rune-btn"
+                style={{ marginTop: 14 }}
+                onClick={() => { setLoaded(DEMO); setGate(false); }}
+              >
+                Walk the reference survey
+              </button>
+            </p>
+          </section>
+        </div>
+      )}
 
       {dash && (
         <aside className="dash">
           <header>
-            <h2>dashboard</h2>
-            <button className="hud-btn" onClick={() => setDash(false)}>Close</button>
+            <h2>Ledger</h2>
+            <button className="rune-btn" onClick={() => setDash(false)}>Close</button>
           </header>
 
-          <section className="panel">
-            <h2>reading</h2>
-            <div className="rows">
-              <div><span>showing</span><span>{loaded.label}</span></div>
-              <div><span>shape</span><span>{shape}</span></div>
-              <div><span>crash liquidation</span><span>{usd(br.lower)}</span></div>
-              <div><span>pump liquidation</span><span>{usd(br.upper)}</span></div>
-            </div>
+          <section className="brass panel">
+            <h3>Reading</h3>
+            <dl>
+              <div className="row"><dt>showing</dt><dd>{loaded.label}</dd></div>
+              <div className="row"><dt>shape</dt><dd>{shape}</dd></div>
+              <div className="row peril"><dt>crash liquidation</dt><dd>{usd(br.lower)}</dd></div>
+              <div className="row peril"><dt>pump liquidation</dt><dd>{usd(br.upper)}</dd></div>
+            </dl>
           </section>
 
-          <section className="panel">
-            <h2>measured on the raster</h2>
-            <div className="rows">
-              <div><span>binders</span><span>{features?.binders.length ?? "—"}</span></div>
-              <div><span>fold lines</span><span>{features?.foldLines8 ?? "—"}</span></div>
-              <div><span>basins</span><span>{features?.basins ?? "—"}</span></div>
-              <div><span>passes</span><span>{features?.boundaryPass ? 1 : 0}</span></div>
-              <div>
-                <span>rises with price</span>
-                <span>{features ? `${(features.monoFraction * 100).toFixed(1)}%` : "—"}</span>
-              </div>
-            </div>
-          </section>
-
-          <section className="panel">
-            <h2>deployments</h2>
-            <div className="rows">
+          <section className="brass panel">
+            <h3>Citadels</h3>
+            <dl>
               {loaded.baskets.map((b) => (
-                <div key={b.deploymentId}>
-                  <span>{b.deploymentId}</span>
-                  <span>{exposure(b)}</span>
+                <div className="row" key={b.deploymentId}>
+                  <dt>{b.deploymentId}</dt>
+                  <dd>{exposure(b)}</dd>
                 </div>
               ))}
               {loaded.failed.map((f) => (
-                <div key={f.deploymentId}>
-                  <span>{f.deploymentId}</span>
-                  <span>unsurveyed</span>
+                <div className="row" key={f.deploymentId}>
+                  <dt>{f.deploymentId}</dt>
+                  <dd>unsurveyed</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </section>
 
           <p className="note">
             Two axes only: the price of one asset, and how long it has stayed there. Everything
-            else this wallet holds is held constant.
+            else this book holds is held constant.
             {loaded.offAxisCollateralUSD > 0 &&
-              ` ${usd(loaded.offAxisCollateralUSD)} of off-axis collateral is not on this map.`}
-          </p>
-          <p className="note">
-            Scree reads public positions and never asks for a signature, an approval, or the
-            right to move anything.
+              ` ${usd(loaded.offAxisCollateralUSD)} of off-axis collateral is not on this chart.`}
           </p>
         </aside>
       )}
@@ -212,12 +237,7 @@ export default function Page() {
       {plate && (
         <div className="plate-overlay" onClick={() => setPlate(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <TerrainMap
-              baskets={loaded.baskets}
-              spot={SPOT_ETH_USD}
-              onFeatures={onFeatures}
-              onHover={onHover}
-            />
+            <TerrainMap baskets={loaded.baskets} spot={SPOT_ETH_USD} onHover={() => {}} />
           </div>
         </div>
       )}
@@ -225,22 +245,12 @@ export default function Page() {
   );
 }
 
-function shapeNote(shape: WalletShape, f: Features | null): string {
-  if (!f) return "";
-  if (shape === "MIXED" && f.boundaryPass) {
-    return "This book can die in both directions, so the ground between the two shorelines rises to a ridge. The marked point is the pass: the best health this book can reach at any price.";
-  }
-  if (shape === "MIXED") {
-    return "This book holds both exposures, but only one shoreline falls inside the window.";
-  }
-  return "This book can only die in one direction, so the ground is a ramp. There is no ridge and no pass, and drawing one would be a lie.";
-}
-
 function usd(x: number | null): string {
-  if (x === null) return "none";
+  if (x === null || !Number.isFinite(x)) return "—";
   return `$${x.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 
 function days(d: number): string {
-  return d < 1 ? `${Math.round(d * 24)}h` : `${d.toFixed(1)}d`;
+  if (d < 1) return `${Math.round(d * 24)}h`;
+  return `${d.toFixed(1)}d`;
 }
