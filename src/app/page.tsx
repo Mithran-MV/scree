@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { ArcaneMap, type ChartReadout } from "@/components/ArcaneMap";
+import dynamic from "next/dynamic";
+import type { ChartReadout } from "@/components/PhaserChart";
+
+// Phaser touches window at import time, so the chart mounts on the client only.
+const PhaserChart = dynamic(
+  () => import("@/components/PhaserChart").then((m) => m.PhaserChart),
+  { ssr: false },
+);
 import { TerrainMap } from "@/components/TerrainMap";
 import { ScrollBanner } from "@/components/chrome/ScrollBanner";
 import { Porthole } from "@/components/chrome/Porthole";
@@ -114,7 +121,7 @@ export default function Page() {
       <div className="chart-frame">
         <i /><i /><i /><i />
 
-        <ArcaneMap
+        <PhaserChart
           baskets={loaded.baskets}
           spot={SPOT_ETH_USD}
           onFeatures={onFeatures}
@@ -131,7 +138,7 @@ export default function Page() {
           <div className="runes" aria-hidden="true">
             ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ᛇ ᛈ ᛉ ᛊ ᛏ ᛒ ᛖ ᛗ ᛚ ᛜ ᛞ ᛟ
           </div>
-        </ArcaneMap>
+        </PhaserChart>
 
         <ScrollBanner title="The Scalable Liquidation Defence Tool" />
       </div>
