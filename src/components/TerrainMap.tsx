@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Basket } from "@/core/types";
-import { rasterize, windowAt, priceAt, dwellAt, colOfPrice } from "@/field/raster";
+import { rasterize, renderWindow, priceAt, dwellAt, colOfPrice } from "@/field/raster";
 import { extractFeatures } from "@/field/features";
 import { hillshade } from "@/render/hillshade";
 import { contourSet } from "@/render/contours";
@@ -29,9 +29,13 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<Readout | null>(null);
 
-  const win = useMemo(() => windowAt(spot, { width: 320, height: 320 }), [spot]);
+  const win = useMemo(() => renderWindow(spot), [spot]);
   const raster = useMemo(() => rasterize(baskets, win), [baskets, win]);
   const features = useMemo(() => extractFeatures(raster), [raster]);
+  // One ceiling, computed once and handed to everything that needs it. The
+  // shading and the contours each used to default it independently, so they
+  // agreed only by coincidence and would have drifted apart silently.
+  const ceiling = useMemo(() => Math.max(0.05, raster.range.max), [raster]);
 
   useEffect(() => {
     onFeatures?.(features);
@@ -43,7 +47,7 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const shaded = hillshade(raster);
+    const shaded = hillshade(raster, { ceiling });
     const image = new ImageData(shaded.data, shaded.width, shaded.height);
 
     // The raster is computed at a modest resolution and scaled up for display.
@@ -55,6 +59,10 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
     staging.height = shaded.height;
     staging.getContext("2d")!.putImageData(image, 0, 0);
 
+    const sx = SIZE / (win.width - 1);
+    const sy = SIZE / (win.height - 1);
+    const toScreen = (x: number, y: number): [number, number] => [x * sx, SIZE - y * sy];
+
     canvas.width = SIZE;
     canvas.height = SIZE;
     ctx.imageSmoothingEnabled = true;
@@ -62,14 +70,20 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
     // Raster row 0 is dwell zero, which belongs at the bottom of the map.
     ctx.translate(0, SIZE);
     ctx.scale(1, -1);
-    ctx.drawImage(staging, 0, 0, SIZE, SIZE);
+    // Register the bitmap so sample centres land exactly where `toScreen` puts
+    // them. Drawn flush to the box instead, every sample sits half a cell off
+    // its own coordinate — invisible under a 0.7px hairline, and glaring the
+    // moment the shoreline is drawn heavy.
+    ctx.drawImage(
+      staging,
+      -sx / 2,
+      -sy / 2,
+      (SIZE * win.width) / (win.width - 1),
+      (SIZE * win.height) / (win.height - 1),
+    );
     ctx.restore();
 
-    const sx = SIZE / (win.width - 1);
-    const sy = SIZE / (win.height - 1);
-    const toScreen = (x: number, y: number): [number, number] => [x * sx, SIZE - y * sy];
-
-    for (const line of contourSet(raster)) {
+    for (const line of contourSet(raster, undefined, ceiling)) {
       const shoreline = line.level === 0;
       ctx.strokeStyle = shoreline ? "rgba(20,32,48,0.85)" : "rgba(40,50,40,0.22)";
       ctx.lineWidth = shoreline ? 1.6 : 0.7;
@@ -137,7 +151,7 @@ export function TerrainMap({ baskets, spot, onFeatures, onHover }: Props) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-  }, [raster, features, win, spot]);
+  }, [raster, features, win, spot, ceiling]);
 
   function move(event: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
