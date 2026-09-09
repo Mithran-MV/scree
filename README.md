@@ -13,7 +13,7 @@ protocol stops being the thing that kills you and another takes over.
 ## One query, seven deployments
 
 Scree has no per-protocol code. It asks Aave v3, Compound v3 and Spark, on
-mainnet, Arbitrum, Base and Optimism, the same GraphQL query, because all
+mainnet, Arbitrum, Polygon and Avalanche, the same GraphQL query, because all
 seven deployments publish the Messari Standardized Lending schema. The query
 (`src/graph/query.ts`) names no protocol. Adding a deployment costs one row in
 `src/registry/deployments.ts`; there is no adapter to write.
@@ -218,8 +218,16 @@ cp .env.example .env.local   # then fill in GRAPH_API_KEY
 npm run verify:subgraphs     # resolve every registry id before trusting it
 ```
 
-`verify:subgraphs` writes `src/registry/verified.json`; a deployment whose id
-has not passed that check is not allowed to contribute to the terrain.
+`verify:subgraphs` asks each id, through the gateway, for its block, its
+protocol entity and its largest market with a liquidation threshold, and
+passes it only if all three come back in the lending shape. It writes
+`src/registry/verified.json`, which is committed so the check is on the
+record, and `/api/terrain` refuses to ask a deployment that record does not
+vouch for; such a deployment is named in `unverified` in the response rather
+than dropped. The seven ids are Messari's own publications on The Graph
+Network. Aave v3 and Compound v3 on Base, and Aave v3 on Optimism, were left
+out because the network does not serve them today; when it does, each is one
+registry row.
 
 | Script | What it does |
 |---|---|

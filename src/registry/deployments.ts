@@ -7,11 +7,17 @@ import type { Deployment } from "../core/types";
  * can cover four networks and three protocols. Adding a deployment here is the
  * whole cost of adding it to the map; there is no per-protocol adapter.
  *
- * UNVERIFIED: every `subgraphId` below is a placeholder until
- * `npm run verify:subgraphs` has resolved it against the gateway and written
- * `src/registry/verified.json`. Nothing may render live data from an id that
- * has not passed that check. See `verificationStatus()` at the bottom of this
- * file, which is what the interface asks before it trusts a deployment.
+ * Every `subgraphId` is a Messari Standardized Lending subgraph on The Graph
+ * Network, published under Messari's own account. `npm run verify:subgraphs`
+ * resolves each id through the gateway, checks that it answers in the lending
+ * schema with at least one market, and writes `src/registry/verified.json`.
+ * The terrain route trusts a deployment only if that record says so, see
+ * `verifiedOnly()` at the bottom of this file.
+ *
+ * Two natural picks are absent because the network does not serve them at the
+ * moment: Aave v3 and Compound v3 on Base have no indexer allocation, and the
+ * Aave v3 Optimism subgraph is synced but holds no markets. When that changes,
+ * adding them back is one row each.
  */
 export const DEPLOYMENTS: Deployment[] = [
   {
@@ -29,38 +35,38 @@ export const DEPLOYMENTS: Deployment[] = [
     dialect: "messari-lending-v1",
   },
   {
-    id: "aave-v3-base",
+    id: "aave-v3-polygon",
     protocol: "Aave v3",
-    network: "base",
-    subgraphId: "GQFbb95cE6d8mV989mL5figjaGaKCQB3xqYrr1bRyXqF",
+    network: "polygon",
+    subgraphId: "6yuf1C49aWEscgk5n9D1DekeG1BCk5Z9imJYJT3sVmAT",
     dialect: "messari-lending-v1",
   },
   {
-    id: "aave-v3-optimism",
+    id: "aave-v3-avalanche",
     protocol: "Aave v3",
-    network: "optimism",
-    subgraphId: "DSfLz8oQBUeU5atALgUFQKMTSYV9mZAVYp4noLSXAfvb",
+    network: "avalanche",
+    subgraphId: "72Cez54APnySAn6h8MswzYkwaL9KjvuuKnKArnPJ8yxb",
     dialect: "messari-lending-v1",
   },
   {
     id: "compound-v3-ethereum",
     protocol: "Compound v3",
     network: "mainnet",
-    subgraphId: "5nwMCSHaTqG3Kd2gHznbTXEnZ9QNWsssQfbHhDqQSQFp",
+    subgraphId: "AwoxEZbiWLvv6e3QdvdMZw4WDURdGbvPfHmZRc8Dpfz9",
     dialect: "messari-lending-v1",
   },
   {
-    id: "compound-v3-base",
+    id: "compound-v3-arbitrum",
     protocol: "Compound v3",
-    network: "base",
-    subgraphId: "2hcXhs36pTBDVUmk5K2Zkr6N4UYGwaHuAWqTLLu4MVQb",
+    network: "arbitrum-one",
+    subgraphId: "5MjRndNWGhqvNX7chUYLQDnvEgc8DaH8eisEkcJt71SR",
     dialect: "messari-lending-v1",
   },
   {
     id: "spark-ethereum",
     protocol: "Spark",
     network: "mainnet",
-    subgraphId: "8JBHnQCRXTVc2yGgBhbCkHzp8gU2r2NqZ9hE3rSNRWNq",
+    subgraphId: "GbKdmBe4ycCYCQLQSjqGg6UHYoYfbyJyq5WrG35pv1si",
     dialect: "messari-lending-v1",
   },
 ];
@@ -95,13 +101,18 @@ export function parseSources(param: string | null): string[] | null {
  *
  * The map must never present numbers sourced from an unverified id, so this is
  * consulted before a deployment contributes to the terrain. It reads the
- * artifact written by `npm run verify:subgraphs`.
+ * artifact written by `npm run verify:subgraphs`, which is committed so the
+ * check is on the record: `ok` means the id resolved, answered in the lending
+ * schema, and had at least one market at the block noted.
  */
 export interface VerificationRecord {
   deploymentId: string;
   ok: boolean;
   blockHeight: number | null;
   checkedAt: string;
+  /** What the subgraph said it was, when it answered. */
+  protocol?: string;
+  network?: string;
   error?: string;
 }
 

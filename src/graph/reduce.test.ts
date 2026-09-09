@@ -51,13 +51,13 @@ const LEGS: WalletLeg[] = [
     quantity: 28_000,
   },
   {
-    deploymentId: "compound-v3-base",
+    deploymentId: "compound-v3-arbitrum",
     market: market({ symbol: "USDC", liquidationThreshold: 0.78, supplyRate: 0.043 }),
     side: "SUPPLY",
     quantity: 62_000,
   },
   {
-    deploymentId: "compound-v3-base",
+    deploymentId: "compound-v3-arbitrum",
     market: market({ symbol: "WETH", inputTokenPriceUSD: 4000, borrowRate: 0.027 }),
     side: "BORROW",
     quantity: 10,

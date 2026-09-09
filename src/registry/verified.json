@@ -1,0 +1,58 @@
+[
+  {
+    "deploymentId": "aave-v3-ethereum",
+    "ok": true,
+    "blockHeight": 25939976,
+    "checkedAt": "2026-09-09T13:00:48.575Z",
+    "protocol": "Aave v3",
+    "network": "MAINNET"
+  },
+  {
+    "deploymentId": "aave-v3-arbitrum",
+    "ok": true,
+    "blockHeight": 503373124,
+    "checkedAt": "2026-09-09T13:00:49.304Z",
+    "protocol": "Aave v3",
+    "network": "ARBITRUM_ONE"
+  },
+  {
+    "deploymentId": "aave-v3-polygon",
+    "ok": true,
+    "blockHeight": 93502543,
+    "checkedAt": "2026-09-09T13:00:49.787Z",
+    "protocol": "Aave v3",
+    "network": "MATIC"
+  },
+  {
+    "deploymentId": "aave-v3-avalanche",
+    "ok": true,
+    "blockHeight": 94856815,
+    "checkedAt": "2026-09-09T13:00:50.160Z",
+    "protocol": "Aave v3",
+    "network": "AVALANCHE"
+  },
+  {
+    "deploymentId": "compound-v3-ethereum",
+    "ok": true,
+    "blockHeight": 25939976,
+    "checkedAt": "2026-09-09T13:00:50.523Z",
+    "protocol": "Compound III",
+    "network": "MAINNET"
+  },
+  {
+    "deploymentId": "compound-v3-arbitrum",
+    "ok": true,
+    "blockHeight": 503373124,
+    "checkedAt": "2026-09-09T13:00:50.914Z",
+    "protocol": "Compound III",
+    "network": "ARBITRUM_ONE"
+  },
+  {
+    "deploymentId": "spark-ethereum",
+    "ok": true,
+    "blockHeight": 25939976,
+    "checkedAt": "2026-09-09T13:00:51.287Z",
+    "protocol": "Spark Lend",
+    "network": "MAINNET"
+  }
+]

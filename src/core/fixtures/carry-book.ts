@@ -12,7 +12,7 @@ import type { Basket } from "../types";
  *   Aave v3 Arbitrum   supply 6 WETH (LT 0.825)            borrow 17,000 USDT
  *   Spark Ethereum     supply 6 WETH (LT 0.80)             borrow 28,000 USDS
  *                      supply 0.153 WBTC at $110,000 (LT 0.75)
- *   Compound v3 Base   supply 62,000 USDC (LT 0.78)        borrow 10 WETH
+ *   Compound v3 Arbitrum supply 62,000 USDC (LT 0.78)        borrow 10 WETH
  */
 
 const WBTC_PRICE_USD = 110_000;
@@ -37,7 +37,7 @@ export const CARRY_BOOK: Basket[] = [
     rb: 0.064,
   },
   {
-    deploymentId: "compound-v3-base",
+    deploymentId: "compound-v3-arbitrum",
     a: 0,
     c: 62_000 * 0.78,
     u: 10,

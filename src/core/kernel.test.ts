@@ -113,7 +113,7 @@ describe("elevation and the binding deployment", () => {
     const fold = 4156.79349;
     expect(healthFactor(SPARK, fold, 0)).toBeCloseTo(healthFactor(COMPOUND, fold, 0), 7);
     expect(bindingDeployment(CARRY_BOOK, fold - 50, 0)).toBe("spark-ethereum");
-    expect(bindingDeployment(CARRY_BOOK, fold + 50, 0)).toBe("compound-v3-base");
+    expect(bindingDeployment(CARRY_BOOK, fold + 50, 0)).toBe("compound-v3-arbitrum");
   });
 
   it("puts the highest ground of the book on that second fold", () => {

@@ -12,7 +12,7 @@ describe("bracket", () => {
     expect(b.lower).toBeCloseTo(3434.343434, 6); // Aave, above Spark's 3203.65
     expect(b.lowerBinder).toBe("aave-v3-arbitrum");
     expect(b.upper).toBeCloseTo(4836, 9);
-    expect(b.upperBinder).toBe("compound-v3-base");
+    expect(b.upperBinder).toBe("compound-v3-arbitrum");
   });
 
   it("has no upper bound for a long-only book", () => {
