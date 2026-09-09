@@ -42,6 +42,12 @@ export interface UIState {
   wallet: string | null;
   feed: FeedRow[];
   chart: TerraceChart;
+  /**
+   * What the survey has to say about its sources: deployments that did not
+   * answer, and deployments set aside because the schema could not explain
+   * them. Each new line is written to the log once.
+   */
+  notes: string[];
   /** Owned by the interface: set when the scouts go out, cleared when the world reports them home. */
   scoutsBusy: boolean;
 }
@@ -208,7 +214,11 @@ export class UIScene extends Phaser.Scene {
 
   /** Replace part of the state and redraw what shows it. */
   setState(next: Partial<UIState>) {
+    const before = new Set(this.state.notes);
     this.state = { ...this.state, ...next };
+    for (const line of this.state.notes) {
+      if (!before.has(line)) this.log = [line, ...this.log].slice(0, 8);
+    }
     if (this.column) {
       this.drawColumn();
       this.drawBar();

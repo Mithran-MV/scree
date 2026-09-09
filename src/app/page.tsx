@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import { TerrainMap } from "@/components/TerrainMap";
+import type { Sources } from "@/components/ScreeGame";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import type { Basket } from "@/core/types";
 
@@ -17,7 +18,7 @@ interface Loaded {
   /** Today's price of the charted asset, as the deployments reported it. */
   spot: number;
   label: string;
-  failed: { deploymentId: string; reason: string }[];
+  sources: Sources;
   offAxisCollateralUSD: number;
 }
 
@@ -25,7 +26,7 @@ const DEMO: Loaded = {
   baskets: CARRY_BOOK,
   spot: SPOT_ETH_USD,
   label: "reference carry book",
-  failed: [],
+  sources: { asked: [], healthy: [], notes: [] },
   offAxisCollateralUSD: 0.153 * 110_000,
 };
 
@@ -56,7 +57,11 @@ export default function Page() {
         baskets: body.baskets,
         spot: typeof body.spot === "number" && body.spot > 0 ? body.spot : SPOT_ETH_USD,
         label: `${target.slice(0, 6)}…${target.slice(-4)}`,
-        failed: [...(body.failed ?? []), ...(body.excluded ?? [])],
+        sources: {
+          asked: body.askedOf ?? [],
+          healthy: body.healthy ?? [],
+          notes: [...(body.failed ?? []), ...(body.excluded ?? [])],
+        },
         offAxisCollateralUSD: body.offAxisCollateralUSD ?? 0,
       });
     } catch (err) {
@@ -115,6 +120,7 @@ export default function Page() {
         baskets={loaded.baskets}
         label={loaded.label}
         spot={loaded.spot}
+        sources={loaded.sources}
         busy={busy}
         error={error}
         address={address}

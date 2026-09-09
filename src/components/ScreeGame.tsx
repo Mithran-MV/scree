@@ -14,10 +14,20 @@ import type { ZoneReading } from "@/game/events";
 import type { PriceTick, ScoutPath, WorldData, WorldScene } from "@/game/WorldScene";
 import type { FeedRow, PushedState, TerraceChart, UIData, UIScene } from "@/game/UIScene";
 
+export interface Sources {
+  /** Deployments the survey asked, in registry order. Empty for the reference book. */
+  asked: string[];
+  /** Deployments that answered. */
+  healthy: string[];
+  /** Deployments that did not answer, or were set aside, each with its reason. */
+  notes: { deploymentId: string; reason: string }[];
+}
+
 interface Props {
   baskets: Basket[];
   label: string;
   spot: number;
+  sources: Sources;
   busy: boolean;
   error: string | null;
   address: string;
@@ -169,9 +179,17 @@ export function ScreeGame(props: Props) {
 
   /* ── the feed ─────────────────────────────────────────────────── */
 
+  const { sources } = props;
   const feed = useMemo<FeedRow[]>(
     () => [
       { key: "ETH", value: usd(spot) },
+      {
+        key: "sources",
+        value: sources.asked.length
+          ? `${sources.healthy.length} of ${sources.asked.length} answered`
+          : "reference book",
+        ...(sources.notes.length ? { tone: "peril" as const } : {}),
+      },
       { key: "health today", value: healthToday.toFixed(3), tone: "ley" },
       { key: "crash liquidation", value: usd(br.lower), tone: "peril" },
       { key: "pump liquidation", value: usd(br.upper), tone: "peril" },
@@ -182,7 +200,12 @@ export function ScreeGame(props: Props) {
       { key: "passes", value: features.boundaryPass ? "1" : "0", tone: "ley" },
       { key: "rises with price", value: `${(features.monoFraction * 100).toFixed(1)}%` },
     ],
-    [spot, healthToday, br, shape, grid.zones.length, features],
+    [spot, sources, healthToday, br, shape, grid.zones.length, features],
+  );
+
+  const notes = useMemo(
+    () => sources.notes.map((n) => `${n.deploymentId}: ${n.reason}`),
+    [sources],
   );
 
   /* ── state pushed to the interface ────────────────────────────── */
@@ -196,8 +219,9 @@ export function ScreeGame(props: Props) {
       wallet: props.wallet,
       feed,
       chart,
+      notes,
     }),
-    [props.label, props.busy, props.error, props.wallet, feed, chart, spot],
+    [props.label, props.busy, props.error, props.wallet, feed, chart, notes, spot],
   );
   const pushedRef = useRef(pushed);
   useEffect(() => {
