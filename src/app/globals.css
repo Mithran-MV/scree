@@ -224,7 +224,11 @@ html, body {
 
 .scree { position: absolute; inset: 0; }
 .world-host { position: absolute; inset: 0; background: var(--void); }
-.world-host canvas { display: block; }
+.world-host canvas {
+  display: block;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
 
 /* The address field: a real input laid over the slot the dashboard draws. */
 .address-slot {

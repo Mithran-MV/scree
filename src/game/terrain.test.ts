@@ -3,7 +3,7 @@ import { bracket } from "@/core/bracket";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import { dwellAt, fittedWindow, priceAt, rasterize } from "@/field/raster";
 import { dwellYears, elevation } from "@/core/kernel";
-import { Band, CORNER, RELIEF, TILE_PX, bandOf, buildTerrainGrid, dwellFyToTileY, footprintCells, heightAt, isWater, mapFxOf, priceFxToTileX, warpFx } from "./terrain";
+import { Band, CORNER, RELIEF, TILE_PX, bandOf, buildTerrainGrid, dwellFyToTileY, footprintCells, heightAt, isWater, mapFxOf, priceFxToTileX, surveyWindow, warpFx } from "./terrain";
 
 const br = bracket(CARRY_BOOK, 0);
 const win = fittedWindow(SPOT_ETH_USD, br.lower, br.upper);
@@ -18,11 +18,13 @@ const fxOf = (price: number) => {
 const tileAt = (tx: number, ty: number) => grid.tiles[ty * grid.cols + tx]!;
 
 describe("bandOf", () => {
-  it("puts everything below sea level under water, the shelf first and the deep below it", () => {
-    expect(bandOf(-0.001, 1)).toBe(Band.SHALLOW);
-    expect(bandOf(-0.05, 1)).toBe(Band.SHALLOW);
-    expect(bandOf(-0.07, 1)).toBe(Band.DEEP);
-    expect(bandOf(-5, 1)).toBe(Band.DEEP);
+  it("puts everything below sea level under water: shelf, deep and abyss as fractions of the floor", () => {
+    expect(bandOf(-0.001, 1, -0.3)).toBe(Band.SHALLOW);
+    expect(bandOf(-0.05, 1, -0.3)).toBe(Band.SHALLOW);
+    expect(bandOf(-0.07, 1, -0.3)).toBe(Band.DEEP);
+    expect(bandOf(-0.25, 1, -0.3)).toBe(Band.ABYSS);
+    expect(bandOf(-5, 1, -0.3)).toBe(Band.ABYSS);
+    expect(isWater(Band.ABYSS)).toBe(true);
     expect(isWater(Band.DEEP)).toBe(true);
     expect(isWater(Band.COAST)).toBe(false);
   });
@@ -30,9 +32,9 @@ describe("bandOf", () => {
   it("climbs through the biomes with elevation", () => {
     expect(bandOf(0, 1)).toBe(Band.COAST);
     expect(bandOf(0.3, 1)).toBe(Band.GRASS);
-    expect(bandOf(0.7, 1)).toBe(Band.FOREST);
-    expect(bandOf(0.9, 1)).toBe(Band.MOUNTAIN);
-    expect(bandOf(1, 1)).toBe(Band.SNOW);
+    expect(bandOf(0.5, 1)).toBe(Band.FOREST);
+    expect(bandOf(0.7, 1)).toBe(Band.MOUNTAIN);
+    expect(bandOf(0.95, 1)).toBe(Band.SNOW);
   });
 });
 
@@ -172,6 +174,33 @@ describe("relief", () => {
     const sum = shares.reduce((a, b) => a + b, 0);
     expect(sum).toBeGreaterThan(0.99);
     expect(sum).toBeLessThan(1.01);
+  });
+});
+
+describe("the sea", () => {
+  it("has all three water bands in the survey window", () => {
+    const w = surveyWindow(SPOT_ETH_USD, br.lower, br.upper);
+    const g = buildTerrainGrid(rasterize(CARRY_BOOK, w), CARRY_BOOK, SPOT_ETH_USD);
+    const count = (b: Band) => g.tiles.filter((t) => t.lo === b).length;
+    expect(count(Band.SHALLOW)).toBeGreaterThan(0);
+    expect(count(Band.DEEP)).toBeGreaterThan(0);
+    expect(count(Band.ABYSS)).toBeGreaterThan(0);
+    // Rock outnumbers snow: the ridge is a range with a capped crest, not a snowfield.
+    expect(count(Band.MOUNTAIN)).toBeGreaterThan(count(Band.SNOW));
+  });
+});
+
+describe("surveyWindow", () => {
+  it("is landscape-shaped and holds the bracket in about two thirds of its width, sea on both sides", () => {
+    const w = surveyWindow(SPOT_ETH_USD, br.lower, br.upper);
+    expect(w.width).toBeGreaterThan(w.height);
+    const lo = priceAt(w, 0);
+    const hi = priceAt(w, w.width - 1);
+    const f = (p: number) => Math.log(p / lo) / Math.log(hi / lo);
+    expect(f(br.lower!)).toBeGreaterThan(0.1);
+    expect(f(br.lower!)).toBeLessThan(0.25);
+    expect(f(br.upper!)).toBeGreaterThan(0.75);
+    expect(f(br.upper!)).toBeLessThan(0.9);
   });
 });
 

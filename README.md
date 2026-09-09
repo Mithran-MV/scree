@@ -39,13 +39,22 @@ corner they share. `src/game/tileset.ts` paints the tileset from colours
 sampled off the Kenney sheet: eight rolling frames per water band, four frames
 of foam on the shore, a lit lip and a two-pixel cliff on every land step.
 
+The survey draws its own window (`surveyWindow`): a landscape-shaped field
+in which the survivable bracket takes about two thirds of the width, with real
+sea on both sides. Under the map runs the survey's paper margin, a ruled price
+scale, which also gives the camera room to hold the surveyor above the edge.
+
 Health depends on price far more than on dwell, so the raw field is a set of
 vertical stripes. Two things bend it into a landscape without moving sea level
 (`src/game/terrain.ts`, `RELIEF`): a domain warp lets the price axis wander
-with dwell, and the same warp is applied to every reading, so what the map
-shows at a point is what the book says there; and simplex noise on the height
-fades to nothing at the shore and is clamped so it never crosses it. Coves,
-headlands, plateaus and ridges are relief; the liquidation line is exact.
+with map height, and the same warp is applied to every reading, so what the
+map shows at a point is what the book says there; and simplex noise on the
+height fades to nothing at the shore and is clamped so it never crosses it.
+Coves, headlands, plateaus and ridges are relief; the liquidation line is
+exact. The water is banded by fraction of the window's floor into a shelf, the
+deep and the abyss, so every book has all three however deep its sea goes; the
+land by fraction of its ceiling, with rock from the forest line to the snow
+line so the ridge reads as a range.
 
 Everything on the land is a rule of the tile under it. `src/game/clutter.ts`
 fills each biome from its own catalogue — driftwood on the coast, deciduous
@@ -54,16 +63,17 @@ aether crystals on the heights — grouped by a slow noise into groves and
 fields. Each territory's holdfast is planned onto the highest ground it rules,
 clear of the map's edge, built from a blueprint for its protocol's family
 (`src/game/holdfasts.ts`), and given living parts: windows that glow, a gear
-that turns, an orb that floats, flags that wave. The argmin borders are
+that turns, an orb that floats, flags that wave. A banner floats over each,
+naming the deployment and the share of the ground it binds. The argmin borders are
 faults: a chain of crags over ley that breathes, denser and studded with
 ruins on the pass where long meets short. The deep water has its leviathans
 (`src/game/SeaMonster.ts`), physics sprites that patrol their basin by tween,
 trail bubbles, dive and surface on their own clock, and warn about slippage,
 cascades and oracle drift when you hover them.
 
-Depth is strict: water at 0, terrain at 10, the lines above it, the terrace outline
-at 16, everything standing on the ground y-sorted inside 20–24, the surveyor at
-30, the interface from 90 and its pop-ups at 100.
+Depth is strict: water at 0, the paper margin at 5, terrain at 10, the lines
+above it, everything standing on the ground y-sorted inside 20–24, the
+surveyor at 30, the interface from 90 and its pop-ups at 100.
 
 ## Why the ground has shape
 

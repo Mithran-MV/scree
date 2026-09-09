@@ -22,7 +22,8 @@ export const WATER_FRAMES = 8;
 export const SHORE_FRAMES = 4;
 const VARIANTS = 3;
 const LAND_VARIANTS = 4; // three plain, one with a feature
-const LAND_BANDS = BAND_COUNT - 2;
+const WATER_BANDS = 3;
+const LAND_BANDS = BAND_COUNT - WATER_BANDS;
 const PAIRS = BAND_COUNT - 1;
 const MASKS = 14;
 
@@ -46,14 +47,13 @@ export interface Materials {
 /* ── indices ─────────────────────────────────────────────────────────── */
 
 const WATER_BASE = 0;
-const INTERIOR_BASE = WATER_BASE + 2 * WATER_FRAMES * VARIANTS;
+const INTERIOR_BASE = WATER_BASE + WATER_BANDS * WATER_FRAMES * VARIANTS;
 const TRANSITION_BASE = INTERIOR_BASE + LAND_BANDS * LAND_VARIANTS;
 const SHORE_BASE = TRANSITION_BASE + PAIRS * MASKS;
 export const GENERATED_TOTAL = SHORE_BASE + (SHORE_FRAMES - 1) * MASKS;
 
 export function waterIndex(band: Band, frame: number, variant: number): number {
-  const b = band === Band.DEEP ? 0 : 1;
-  return WATER_BASE + b * WATER_FRAMES * VARIANTS + (frame % WATER_FRAMES) * VARIANTS + (variant % VARIANTS);
+  return WATER_BASE + band * WATER_FRAMES * VARIANTS + (frame % WATER_FRAMES) * VARIANTS + (variant % VARIANTS);
 }
 
 export function interiorIndex(band: Band, variant: number): number {
@@ -122,7 +122,8 @@ export function materialsFromPack(scene: Phaser.Scene, townKey: string): Materia
   const stone = sampleFrame(scene, townKey, 109) ?? { r: 168, g: 170, b: 178 };
   return {
     band: {
-      [Band.DEEP]: material({ r: 18, g: 42, b: 68 }),
+      [Band.ABYSS]: material({ r: 9, g: 24, b: 46 }),
+      [Band.DEEP]: material({ r: 18, g: 44, b: 72 }),
       [Band.SHALLOW]: material({ r: 36, g: 116, b: 138 }),
       [Band.COAST]: material(mix(dirt, { r: 238, g: 222, b: 182 }, 0.55)),
       [Band.GRASS]: material(grass),
@@ -220,7 +221,7 @@ function paintFeature(ctx: CanvasRenderingContext2D, x0: number, y0: number, ban
  * shorter and slower; shallow water glitters.
  */
 function paintWater(ctx: CanvasRenderingContext2D, x0: number, y0: number, band: Band, m: Material, frame: number, variant: number): void {
-  const deep = band === Band.DEEP;
+  const deep = band !== Band.SHALLOW;
   for (let y = 0; y < TILE; y++) {
     for (let x = 0; x < TILE; x++) {
       const swell = Math.sin(((x + frame * 2 + variant * 4) / 16) * Math.PI * 2 + y * 0.35);
@@ -244,7 +245,7 @@ function paintWater(ctx: CanvasRenderingContext2D, x0: number, y0: number, band:
   });
 }
 
-type TransitionKind = "deep" | "shore" | "land";
+type TransitionKind = "deep" | "shore" | "land" | "cliff";
 
 /**
  * A transition tile: `hi` material inside a disc of radius R around each high
@@ -285,7 +286,7 @@ function paintTransition(
       let c: RGB;
       if (d < R) {
         c = grain < 0.1 ? mix(hi.base, hi.shade, 0.5) : hi.base;
-        if (kind === "land") {
+        if (kind === "land" || kind === "cliff") {
           if (!isHi(x, y - 1)) c = hi.light; // the lit lip along the top of the step
           else if (d > R - 1.2) c = hi.shade;
         } else if (d > R - 1.2) {
@@ -294,9 +295,16 @@ function paintTransition(
       } else {
         c = grain < 0.1 ? mix(lo.base, lo.shade, 0.5) : lo.base;
         if (kind === "land") {
-          // The cliff: the two rows under a high pixel fall into shadow.
+          // The step: the two rows under a high pixel fall into shadow.
           if (isHi(x, y - 1) || isHi(x, y - 2)) c = scale(hi.shade, isHi(x, y - 1) ? 0.62 : 0.8);
           else if (d < R + 1.2) c = mix(lo.base, lo.shade, 0.5);
+        } else if (kind === "cliff") {
+          // The cliff: three rows of rock face under the edge, a dark foot, scree beyond it.
+          if (isHi(x, y - 1)) c = scale(hi.shade, 0.55);
+          else if (isHi(x, y - 2)) c = grainOf(x, y) < 0.5 ? scale(hi.shade, 0.7) : scale(hi.shade, 0.85);
+          else if (isHi(x, y - 3)) c = scale(hi.shade, 0.5);
+          else if (d < R + 1.2 && (isHi(x - 1, y) || isHi(x + 1, y))) c = scale(hi.shade, 0.7);
+          else if (d < R + 2.5 && hash(x, y, 71) > 0.6) c = mix(lo.base, hi.shade, 0.5);
         } else if (kind === "shore") {
           const band = 1.2 + frame * 0.45;
           const spray = hash(x, y, 50 + frame) > 0.6;
@@ -326,7 +334,7 @@ export function buildTerrainTileset(scene: Phaser.Scene, key: string, materials:
   const at = (index: number) => ({ x: (index % COLUMNS) * TILE, y: Math.floor(index / COLUMNS) * TILE });
   const m = materials.band;
 
-  for (const band of [Band.DEEP, Band.SHALLOW]) {
+  for (const band of [Band.ABYSS, Band.DEEP, Band.SHALLOW]) {
     for (let f = 0; f < WATER_FRAMES; f++) {
       for (let v = 0; v < VARIANTS; v++) {
         const p = at(waterIndex(band, f, v));
@@ -342,7 +350,7 @@ export function buildTerrainTileset(scene: Phaser.Scene, key: string, materials:
     }
   }
   for (let lo = 0; lo < PAIRS; lo++) {
-    const kind: TransitionKind = lo === Band.DEEP ? "deep" : lo === Band.SHALLOW ? "shore" : "land";
+    const kind: TransitionKind = lo < Band.SHALLOW ? "deep" : lo === Band.SHALLOW ? "shore" : lo >= Band.FOREST ? "cliff" : "land";
     for (let mask = 1; mask <= MASKS; mask++) {
       const p = at(transitionIndex(lo as Band, mask));
       paintTransition(ctx, p.x, p.y, m[lo as Band], m[(lo + 1) as Band], mask, kind, 0);

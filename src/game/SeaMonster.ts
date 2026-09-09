@@ -28,6 +28,8 @@ export class SeaMonster extends Phaser.Physics.Arcade.Sprite {
   private readonly bubbles: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly splash: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly hooks: MonsterHooks;
+  /** Vertical bob in frame pixels, tweened; applied through the origin so the patrol tween owns `y`. */
+  private bob = 0;
 
   static registerAnimations(scene: Phaser.Scene): void {
     for (const kind of MONSTERS.kinds) {
@@ -84,8 +86,14 @@ export class SeaMonster extends Phaser.Physics.Arcade.Sprite {
     this.splash.setDepth(hooks.depthAt(y) + 0.02);
 
     this.play(`${spec.key}-idle_swim`);
+    scene.tweens.add({ targets: this, bob: { from: -1.2, to: 1.2 }, duration: 1300 + Phaser.Math.Between(0, 500), yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.nextLeg();
     this.scheduleDive();
+  }
+
+  override preUpdate(time: number, delta: number): void {
+    super.preUpdate(time, delta);
+    this.setDisplayOrigin(this.width / 2, this.height / 2 + this.bob);
   }
 
   get submerged(): boolean {

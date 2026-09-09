@@ -34,10 +34,12 @@ export interface LabelOptions {
   stroke?: { color: number; thickness: number } | undefined;
   shadow?: boolean | undefined;
   wrap?: number | undefined;
+  /** Pixel-font type: rendered 1:1 and sampled nearest, on whole pixels. */
+  crisp?: boolean | undefined;
 }
 
 export function label(scene: Phaser.Scene, x: number, y: number, text: string, options: LabelOptions = {}): Phaser.GameObjects.Text {
-  const t = scene.add.text(x, y, text, {
+  const t = scene.add.text(options.crisp ? Math.round(x) : x, options.crisp ? Math.round(y) : y, text, {
     fontFamily: options.font ?? FONT_MONO,
     fontSize: `${options.size ?? 11}px`,
     color: hex(options.color ?? T.ink),
@@ -47,8 +49,13 @@ export function label(scene: Phaser.Scene, x: number, y: number, text: string, o
   // The game runs with pixelArt on, which is right for the sprites and wrong
   // for type: text canvases would be sampled nearest-neighbour at 1x. Render
   // them at device resolution and filter them linearly.
-  t.setResolution(Math.min(2, window.devicePixelRatio || 1));
-  t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  if (options.crisp) {
+    t.setResolution(1);
+    t.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  } else {
+    t.setResolution(Math.min(2, window.devicePixelRatio || 1));
+    t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  }
   if (options.tracking) t.setLetterSpacing(options.tracking);
   if (options.stroke) t.setStroke(hex(options.stroke.color), options.stroke.thickness);
   if (options.shadow) t.setShadow(2, 2, hex(T.shellEdge), 0, true, true);

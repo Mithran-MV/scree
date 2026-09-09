@@ -13,7 +13,8 @@ import {
   type ZoneReading,
 } from "./events";
 import { T } from "./theme";
-import type { WorldScene } from "./WorldScene";
+import type { Anchor, WorldScene } from "./WorldScene";
+import { AXIS_H } from "./WorldScene";
 
 export interface FeedRow {
   key: string;
@@ -61,7 +62,15 @@ export interface UIData {
 }
 
 /** Depth plan for the interface: everything above the world, pop-ups on top. */
-const UI_DEPTH = { frame: 90, column: 92, bar: 95, plate: 96, hover: 100, popup: 100 } as const;
+const UI_DEPTH = { frame: 90, column: 92, banners: 93, bar: 95, plate: 96, hover: 100, popup: 100 } as const;
+
+interface Banner {
+  anchor: Anchor;
+  box: Phaser.GameObjects.Container;
+  w: number;
+  h: number;
+  bob: number;
+}
 
 const usd = (x: number | null) =>
   x === null || !Number.isFinite(x) ? "—" : `$${x.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -91,6 +100,8 @@ export class UIScene extends Phaser.Scene {
   private popupTimer: Phaser.Time.TimerEvent | undefined;
   private popupPinnedUntil = 0;
   private log: string[] = [];
+  private banners: Banner[] = [];
+  private axisLabels: Phaser.GameObjects.Text[] = [];
 
   constructor() {
     super({ key: "UIScene" });
@@ -120,6 +131,7 @@ export class UIScene extends Phaser.Scene {
     this.popup = this.add.container(0, 0).setDepth(UI_DEPTH.popup).setVisible(false);
 
     this.layout();
+    this.raiseBanners();
     this.scale.on("resize", () => this.layout(), this);
 
     const ev = this.world.events;
@@ -145,6 +157,52 @@ export class UIScene extends Phaser.Scene {
     ev.on(EV.scouts, (s: ScoutsEvent) => {
       this.state.scoutsBusy = false;
       this.note(`${s.survived} of ${s.total} scouts returned: ${((s.survived / s.total) * 100).toFixed(1)}% survive from here.`);
+    });
+  }
+
+  /**
+   * Territory banners float over the holdfasts and price labels sit on the
+   * scale under the map. Both live in this scene, so their type stays crisp
+   * at any zoom, and are projected from world to screen every frame.
+   */
+  private raiseBanners() {
+    const f = this.opts.fonts;
+    for (const b of this.banners) b.box.destroy();
+    for (const t of this.axisLabels) t.destroy();
+    this.banners = this.world.holdfasts.map((anchor) => {
+      const text = label(this, 0, 0, `${anchor.deploymentId} · ${Math.round(anchor.share * 100)}%`, { size: 8, font: f.pixel, color: T.vellumInk, crisp: true });
+      const w = Math.round(text.width) + 38;
+      const h = 26;
+      const flag = this.add.rectangle(11, 8, 8, 10, anchor.colour).setOrigin(0, 0);
+      const pole = this.add.rectangle(9, 6, 2, 14, 0x4a4238).setOrigin(0, 0);
+      text.setPosition(26, 9);
+      const box = this.add.container(0, 0, [nine(this, UI.panel, 0, 0, w, h), pole, flag, text]).setDepth(UI_DEPTH.banners);
+      const banner: Banner = { anchor, box, w, h, bob: 0 };
+      this.tweens.add({ targets: banner, bob: { from: -2, to: 2 }, duration: 1400 + Math.random() * 600, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+      return banner;
+    });
+    this.axisLabels = this.world.axisTicks.map((tick) =>
+      label(this, 0, 0, `$${tick.price.toLocaleString("en-US")}`, { size: 8, font: f.pixel, color: T.vellumInk, crisp: true, align: "center" }).setDepth(UI_DEPTH.banners),
+    );
+  }
+
+  override update() {
+    const cam = this.world.cameras.main;
+    const v = mapViewport(this.scale.width, this.scale.height);
+    const sx = (wx: number) => cam.x + (wx - cam.worldView.x) * cam.zoom;
+    const sy = (wy: number) => cam.y + (wy - cam.worldView.y) * cam.zoom;
+    for (const b of this.banners) {
+      const x = sx(b.anchor.x);
+      const y = sy(b.anchor.top) - 8 + b.bob;
+      const inside = x > v.x - b.w && x < v.x + v.w + b.w && y > v.y && y < v.y + v.h;
+      b.box.setVisible(inside).setPosition(Math.round(x - b.w / 2), Math.round(y - b.h));
+    }
+    this.world.axisTicks.forEach((tick, i) => {
+      const t = this.axisLabels[i]!;
+      const x = sx(tick.fx * this.world.worldWidth);
+      const y = sy(this.world.worldHeight + AXIS_H * 0.5);
+      const inside = x > v.x + 20 && x < v.x + v.w - 20 && y > v.y && y < v.y + v.h - 8;
+      t.setVisible(inside).setPosition(Math.round(x), Math.round(y));
     });
   }
 
@@ -174,9 +232,9 @@ export class UIScene extends Phaser.Scene {
     this.bar.removeAll(true);
     const ground = this.add.tileSprite(0, 0, W, LAYOUT.topBar, UI.topbar).setOrigin(0, 0);
     this.bar.add(ground);
-    this.bar.add(label(this, 18, 9, "SCREE", { size: 22, font: f.pixel, color: T.vellum, stroke: { color: T.shellEdge, thickness: 6 }, shadow: true }));
-    this.bar.add(label(this, 150, 18, "LIQUIDATION TOPOGRAPHY", { size: 8, font: f.pixel, color: T.ley, tracking: 2, stroke: { color: T.shellEdge, thickness: 3 } }));
-    this.bar.add(label(this, W - 18, 18, this.state.headline, { size: 8, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 } }));
+    this.bar.add(label(this, 18, 8, "SCREE", { size: 24, font: f.pixel, color: T.vellum, stroke: { color: T.shellEdge, thickness: 6 }, shadow: true, crisp: true }));
+    this.bar.add(label(this, 160, 18, "LIQUIDATION TOPOGRAPHY", { size: 8, font: f.pixel, color: T.ley, tracking: 2, stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
+    this.bar.add(label(this, W - 18, 18, this.state.headline, { size: 8, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
   }
 
   /** The bezel: housing around the map viewport under the bar, and the inset lines that make it read as glass. */
@@ -205,7 +263,7 @@ export class UIScene extends Phaser.Scene {
     this.plate.removeAll(true);
     const w = 272;
     const pad = 14;
-    const kicker = label(this, pad, pad - 2, "THE SCREE SURVEY", { size: 8, font: f.pixel, color: T.vellumInkDim });
+    const kicker = label(this, pad, pad - 2, "THE SCREE SURVEY", { size: 8, font: f.pixel, color: T.vellumInkDim, crisp: true });
     const title = label(this, pad, pad + 12, "Liquidation Topography", { size: 15, font: f.display, color: T.vellumInk });
     const blurb = label(this, pad, pad + 36, "Elevation is health. Sea level is liquidation. West to east is price; north is how long it held.", {
       size: 10,
@@ -232,7 +290,7 @@ export class UIScene extends Phaser.Scene {
     const chartH = 68;
     const w = pad + textW + 12 + chartW + pad;
     this.hover.removeAll(true);
-    const t = label(this, pad, pad - 3, title, { size: 8, font: f.pixel, color: T.vellumInk, wrap: textW });
+    const t = label(this, pad, pad - 3, title, { size: 8, font: f.pixel, color: T.vellumInk, wrap: textW, crisp: true });
     const b = label(this, pad, pad + t.height + 4, body, { size: 11, font: f.serif, color: T.vellumInkDim, wrap: textW });
     const block = Math.max(t.height + 4 + b.height, chartH + 12);
     const caption = label(this, pad, pad + block + 6, this.state.chart.note, { size: 8.5, font: f.mono, color: T.vellumInk, wrap: w - pad * 2 });
@@ -250,7 +308,7 @@ export class UIScene extends Phaser.Scene {
     g.fillRect(x, y + 12, w, h - 12);
     g.lineStyle(1, T.vellumEdge, 0.7);
     g.strokeRect(x, y + 12, w, h - 12);
-    const head = label(this, x, y - 3, "TERRACE DEPTH", { size: 7, font: f.pixel, color: T.vellumInkDim });
+    const head = label(this, x, y - 3, "TERRACE DEPTH", { size: 8, font: f.pixel, color: T.vellumInkDim, crisp: true });
     if (curve.length < 2) return [g, head];
     const px = x + 4;
     const py = y + 16;
@@ -324,7 +382,7 @@ export class UIScene extends Phaser.Scene {
     // Live feed.
     const feedH = 32 + s.feed.length * 19 + 6;
     this.column.add(nine(this, UI.console, x0, y, cw, feedH));
-    this.column.add(label(this, x0 + pad, y + 11, "LIVE FEED", { size: 8, font: f.pixel, color: T.ley }));
+    this.column.add(label(this, x0 + pad, y + 11, "LIVE FEED", { size: 8, font: f.pixel, color: T.ley, crisp: true }));
     this.column.add(label(this, x0 + cw - pad, y + 11, s.label, { size: 9, color: T.inkDim, align: "right", font: f.mono }));
     let fy = y + 32;
     for (const row of s.feed) {
@@ -338,7 +396,7 @@ export class UIScene extends Phaser.Scene {
     // The log: what happened on the ground, newest first, filling what remains of the column.
     const logH = Math.max(120, H - y - LAYOUT.frame);
     this.column.add(nine(this, UI.console, x0, y, cw, logH));
-    this.column.add(label(this, x0 + pad, y + 11, "ON THE GROUND", { size: 8, font: f.pixel, color: T.ley }));
+    this.column.add(label(this, x0 + pad, y + 11, "ON THE GROUND", { size: 8, font: f.pixel, color: T.ley, crisp: true }));
     if (this.log.length === 0) {
       this.column.add(label(this, x0 + pad, y + 32, "Nothing yet. Click the map and the surveyor walks there.", { size: 10.5, color: T.inkDim, font: f.serif, wrap: cw - pad * 2 }));
     }
@@ -367,7 +425,7 @@ export class UIScene extends Phaser.Scene {
     this.popupTimer?.remove(false);
     this.popup.removeAll(true);
 
-    const t = label(this, 0, 0, title, { size: 8, font: f.pixel, color: tone, wrap: w - pad * 2 });
+    const t = label(this, 0, 0, title, { size: 8, font: f.pixel, color: tone, wrap: w - pad * 2, crisp: true });
     const b = label(this, 0, 0, body, { size: 11, font: f.serif, color: T.vellumInkDim, wrap: w - pad * 2 });
     const h = pad + t.height + 8 + b.height + pad - 2;
     // Children sit around the container's origin, so the scale tween grows the box from its centre.

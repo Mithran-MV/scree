@@ -22,14 +22,10 @@ import { SeaMonster } from "./SeaMonster";
 import { T } from "./theme";
 import type { UIData } from "./UIScene";
 
-/** A defence terrace: a price band × dwell band the user raises by `liftHF`. */
-export interface Terrace {
-  priceFxLo: number;
-  priceFxHi: number;
-  dwellFyLo: number;
-  dwellFyHi: number;
-  liftHF: number;
-  label: string;
+/** A round price on the scale under the map, and the map column that shows it. */
+export interface PriceTick {
+  price: number;
+  fx: number;
 }
 
 export interface ScoutPath {
@@ -42,7 +38,7 @@ export interface WorldData {
   grid: TerrainGrid;
   /** The book's reading at a point, supplied by the owner of the arithmetic. */
   readAt: (fx: number, fy: number) => ZoneReading;
-  terraces: Terrace[];
+  axis: { ticks: PriceTick[] };
   ui: UIData;
 }
 
@@ -52,6 +48,8 @@ const MOTE_KEY = "scree-mote";
 const SCALE = LAYOUT.scale;
 const TILE_PX = TILE * SCALE;
 const WALK_SPEED = 110 * SCALE;
+/** The scale strip under the map, in world pixels: room for the camera to hold the surveyor above the edge. */
+export const AXIS_H = TILE_PX * 6;
 
 /**
  * Depth plan. Everything in the world sits on one of these shelves; what
@@ -61,21 +59,25 @@ const WALK_SPEED = 110 * SCALE;
 export const DEPTH = {
   water: 0,
   shallows: 1,
+  axis: 5,
   terrain: 10,
   lines: 14,
-  terraces: 16,
   ground: 20, // + y-sort, up to 24
   particles: 25,
   scouts: 28,
   surveyor: 30,
 } as const;
 
-interface Anchor {
+/** A holdfast's place in the world, for the interface to hang a banner on and for the surveyor to be greeted at. */
+export interface Anchor {
   x: number;
   y: number;
+  /** World y of the structure's top. */
+  top: number;
   deploymentId: string;
   greeting: string;
   share: number;
+  colour: number;
   zoneIndex: number;
   visited: boolean;
 }
@@ -98,18 +100,6 @@ function glowLines(g: Phaser.GameObjects.Graphics, segs: readonly Segment[], col
   }
 }
 
-function glowRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, colour: number, bright: number, px: number) {
-  const passes: [number, number, number][] = [
-    [px * 7, colour, 0.16],
-    [px * 3.5, colour, 0.34],
-    [px * 1.5, bright, 0.95],
-  ];
-  for (const [width, c, alpha] of passes) {
-    g.lineStyle(width, c, alpha);
-    g.strokeRect(x, y, w, h);
-  }
-}
-
 /**
  * The world.
  *
@@ -126,9 +116,7 @@ export class WorldScene extends Phaser.Scene {
   private water!: Phaser.Tilemaps.TilemapLayer;
   private shallows!: Phaser.Tilemaps.TilemapLayer;
   private terrain!: Phaser.Tilemaps.TilemapLayer;
-  private terraceGlow!: Phaser.GameObjects.Graphics;
   private boundaryLines!: Phaser.GameObjects.Graphics;
-  private terraces: Terrace[] = [];
 
   /** Tiles the water clock repaints, and the shore foam beside them. */
   private waterTiles: { tx: number; ty: number; variant: number; band: Band }[] = [];
@@ -139,6 +127,24 @@ export class WorldScene extends Phaser.Scene {
   private monsters: SeaMonster[] = [];
   private stirred = new Set<SeaMonster>();
   private anchors: Anchor[] = [];
+
+  /** The holdfasts, for the interface. */
+  get holdfasts(): readonly Anchor[] {
+    return this.anchors;
+  }
+
+  get worldWidth(): number {
+    return this.worldW;
+  }
+
+  get worldHeight(): number {
+    return this.worldH;
+  }
+
+  /** The scale under the map, for the interface. */
+  get axisTicks(): readonly PriceTick[] {
+    return this.opts.axis.ticks;
+  }
   private blocked = new Set<string>();
   private hoverCitadel: string | null = null;
   private hoverMonster: SeaMonster | null = null;
@@ -175,7 +181,7 @@ export class WorldScene extends Phaser.Scene {
     this.buildLayers();
     this.animateTiles();
     this.drawLines();
-    this.setTerraces(this.opts.terraces);
+    this.drawAxis();
     this.raiseFaults();
     this.raiseHoldfasts();
     this.placeSurveyor();
@@ -241,9 +247,9 @@ export class WorldScene extends Phaser.Scene {
         const variant = Math.floor(hash(tx, ty, 1) * 3);
 
         if (tile.mask === 0) {
-          if (tile.lo === Band.DEEP) {
-            this.water.putTileAt(waterIndex(Band.DEEP, 0, variant), tx, ty);
-            this.waterTiles.push({ tx, ty, variant, band: Band.DEEP });
+          if (tile.lo <= Band.DEEP) {
+            this.water.putTileAt(waterIndex(tile.lo, 0, variant), tx, ty);
+            this.waterTiles.push({ tx, ty, variant, band: tile.lo });
           } else if (tile.lo === Band.SHALLOW) {
             this.shallows.putTileAt(waterIndex(Band.SHALLOW, 0, variant), tx, ty);
             this.waterTiles.push({ tx, ty, variant, band: Band.SHALLOW });
@@ -257,7 +263,9 @@ export class WorldScene extends Phaser.Scene {
           continue;
         }
 
-        if (tile.lo === Band.DEEP) {
+        if (tile.lo === Band.ABYSS) {
+          this.water.putTileAt(transitionIndex(Band.ABYSS, tile.mask), tx, ty);
+        } else if (tile.lo === Band.DEEP) {
           this.shallows.putTileAt(transitionIndex(Band.DEEP, tile.mask), tx, ty);
         } else if (tile.lo === Band.SHALLOW) {
           this.shallows.putTileAt(shoreIndex(tile.mask, 0), tx, ty);
@@ -279,7 +287,7 @@ export class WorldScene extends Phaser.Scene {
         const wf = this.waterFrame % WATER_FRAMES;
         const sf = Math.floor(this.waterFrame / 2) % SHORE_FRAMES;
         for (const w of this.waterTiles) {
-          (w.band === Band.DEEP ? this.water : this.shallows).putTileAt(waterIndex(w.band, wf, w.variant), w.tx, w.ty);
+          (w.band === Band.SHALLOW ? this.shallows : this.water).putTileAt(waterIndex(w.band, wf, w.variant), w.tx, w.ty);
         }
         for (const s of this.shoreTiles) this.shallows.putTileAt(shoreIndex(s.mask, sf), s.tx, s.ty);
       },
@@ -303,21 +311,22 @@ export class WorldScene extends Phaser.Scene {
     this.boundaryLines = g;
   }
 
-  /* ── terraces ─────────────────────────────────────────────────────── */
+  /* ── the scale ────────────────────────────────────────────────────── */
 
-  /** Mark the defence geometry: a survey outline over each price × dwell band, nothing that hides the ground. */
-  setTerraces(terraces: Terrace[]) {
-    const { grid } = this.opts;
-    this.terraces = terraces;
-    this.terraceGlow?.destroy();
-    this.terraceGlow = this.add.graphics().setDepth(DEPTH.terraces).setAlpha(0.7);
-    for (const t of terraces) {
-      const x0 = Math.max(0, Math.floor(t.priceFxLo * grid.cols));
-      const x1 = Math.min(grid.cols - 1, Math.ceil(t.priceFxHi * grid.cols) - 1);
-      const y0 = Math.max(0, Math.floor(dwellFyToTileY(t.dwellFyHi, grid.rows)));
-      const y1 = Math.min(grid.rows - 1, Math.ceil(dwellFyToTileY(t.dwellFyLo, grid.rows)) - 1);
-      glowRect(this.terraceGlow, x0 * TILE_PX, y0 * TILE_PX, (x1 - x0 + 1) * TILE_PX, (y1 - y0 + 1) * TILE_PX, T.ley, T.leyBright, this.screenPx());
+  /** The price scale under the map: the survey's paper margin, ruled and ticked. Labels are the interface's. */
+  private drawAxis() {
+    const g = this.add.graphics().setDepth(DEPTH.axis);
+    g.fillStyle(T.vellum, 1);
+    g.fillRect(0, this.worldH, this.worldW, AXIS_H);
+    g.fillStyle(T.vellumEdge, 1);
+    g.fillRect(0, this.worldH, this.worldW, SCALE * 2);
+    g.fillStyle(T.vellumInk, 1);
+    g.fillRect(0, this.worldH + SCALE * 2, this.worldW, SCALE);
+    for (const tick of this.opts.axis.ticks) {
+      const x = tick.fx * this.worldW;
+      g.fillRect(x - SCALE * 0.5, this.worldH + SCALE * 2, SCALE, SCALE * 6);
     }
+    for (let x = 0; x < this.worldW; x += TILE_PX) g.fillRect(x, this.worldH + SCALE * 2, SCALE * 0.5, SCALE * 2.5);
   }
 
   /* ── borders ──────────────────────────────────────────────────────── */
@@ -444,9 +453,11 @@ export class WorldScene extends Phaser.Scene {
       this.anchors.push({
         x: left + (w * TILE_PX) / 2,
         y: bottom,
+        top: top - SCALE * 9,
         deploymentId: c.deploymentId,
         greeting: greetingFor(c.deploymentId, c.share),
         share: c.share,
+        colour,
         zoneIndex: c.zone,
         visited: false,
       });
@@ -495,13 +506,14 @@ export class WorldScene extends Phaser.Scene {
   /* ── leviathans ───────────────────────────────────────────────────── */
 
   /**
-   * One leviathan per deep basin. Deep water is split into its connected
-   * basins first, so a monster never crosses land to reach a waypoint, and
-   * waypoints keep a tile of deep water around them.
+   * Leviathans in the deep. Deep water is split into its connected basins
+   * first, so a monster never crosses land to reach a waypoint, and waypoints
+   * keep a tile of deep water around them. Two patrol the eastern sea, one
+   * the western; a book with one sea gets all three.
    */
   private spawnLeviathans() {
     const { grid } = this.opts;
-    const deepAt = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < grid.cols && ty < grid.rows && grid.tiles[ty * grid.cols + tx]!.lo === Band.DEEP && grid.tiles[ty * grid.cols + tx]!.mask === 0;
+    const deepAt = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < grid.cols && ty < grid.rows && grid.tiles[ty * grid.cols + tx]!.lo <= Band.DEEP && grid.tiles[ty * grid.cols + tx]!.mask === 0;
     const open = (tx: number, ty: number) => {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!deepAt(tx + dx, ty + dy)) return false;
       return true;
@@ -529,13 +541,21 @@ export class WorldScene extends Phaser.Scene {
         if (basin.length >= 10) basins.push(basin);
       }
     }
-    basins.sort((a, b) => b.length - a.length);
     if (basins.length === 0) return;
+    const centre = (b: { tx: number }[]) => b.reduce((s, t) => s + t.tx, 0) / b.length;
+    basins.sort((a, b) => centre(b) - centre(a)); // east first
+    const east = basins[0]!;
+    const west = basins.length > 1 ? basins[basins.length - 1]! : east;
 
     MONSTERS.kinds.forEach((spec, i) => {
-      const basin = basins[i % basins.length]!;
+      const basin = i < 2 ? east : west;
+      // The abyss is the widest water and sits at the map's edge; most
+      // waypoints are drawn from the deep band beside the shelf instead, so
+      // the leviathans range across the sea rather than hug the border.
+      const deep = basin.filter((t) => grid.tiles[t.ty * grid.cols + t.tx]!.lo === Band.DEEP);
       const pick = () => {
-        const t = basin[Math.floor(Math.random() * basin.length)]!;
+        const from = deep.length > 4 && Math.random() < 0.65 ? deep : basin;
+        const t = from[Math.floor(Math.random() * from.length)]!;
         return { x: (t.tx + 0.5) * TILE_PX, y: (t.ty + 0.5) * TILE_PX };
       };
       const start = pick();
@@ -561,7 +581,13 @@ export class WorldScene extends Phaser.Scene {
 
   private fitZoom(): number {
     const v = mapViewport(this.scale.width, this.scale.height);
-    return Phaser.Math.Clamp(Math.min(v.w / this.worldW, v.h / this.worldH), 1 / SCALE, 1);
+    return Phaser.Math.Clamp(Math.min(v.w / this.worldW, v.h / (this.worldH + AXIS_H)), 1 / SCALE, 1);
+  }
+
+  /** Hold the surveyor below the viewport's centre, with the paper margin under him, so his ground is never at the edge. */
+  private followOffset(): number {
+    const v = mapViewport(this.scale.width, this.scale.height);
+    return (v.h / this.cameras.main.zoom) * 0.15;
   }
 
   private wireCamera() {
@@ -569,13 +595,14 @@ export class WorldScene extends Phaser.Scene {
     const fit = () => {
       const v = mapViewport(this.scale.width, this.scale.height);
       cam.setViewport(v.x, v.y, v.w, v.h);
+      cam.setFollowOffset(0, this.followOffset());
     };
+    cam.setBounds(0, 0, this.worldW, this.worldH + AXIS_H);
+    cam.setZoom(this.fitZoom());
     fit();
     this.scale.on("resize", fit, this);
-    cam.setBounds(0, 0, this.worldW, this.worldH);
-    cam.setZoom(this.fitZoom());
-    cam.centerOn(this.surveyor.x, this.surveyor.y - TILE_PX * 3);
-    cam.startFollow(this.surveyor, true, 0.08, 0.08);
+    cam.centerOn(this.surveyor.x, this.surveyor.y - this.followOffset());
+    cam.startFollow(this.surveyor, true, 0.08, 0.08, 0, this.followOffset());
   }
 
   private inViewport(pointer: Phaser.Input.Pointer): boolean {
@@ -606,8 +633,8 @@ export class WorldScene extends Phaser.Scene {
       if (!this.inViewport(pointer)) return;
       const cam = this.cameras.main;
       cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.12), this.fitZoom(), 2.5));
+      cam.setFollowOffset(0, this.followOffset());
       this.drawLines();
-      this.setTerraces(this.terraces);
     });
 
     this.game.canvas.addEventListener("mouseleave", () => this.events.emit(EV.hoverEnd));
@@ -744,4 +771,4 @@ export class WorldScene extends Phaser.Scene {
     this.textures.addCanvas(MOTE_KEY, canvas);
   }
 }
-void isWater;
+

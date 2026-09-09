@@ -17,7 +17,7 @@ export const SHEET = {
 } as const;
 
 /** Particle motes and living parts, frames of the fx sheet. */
-export const FX = { bubble: 0, droplet: 1, spark: 2, smoke: 3, cog: 4, orb: 5, glow: 6, window: 7 } as const;
+export const FX = { bubble: 0, droplet: 1, spark: 2, smoke: 3, cog: 4, orb: 5, glow: 6, window: 7, staff: 8 } as const;
 
 /** The surveyor sheet: 4 frames per row, rows in this order. */
 export const SURVEYOR = { frameWidth: 16, frameHeight: 18, rows: ["idle", "walk_down", "walk_up", "walk_left", "walk_right"] as const };

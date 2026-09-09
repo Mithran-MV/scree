@@ -5,12 +5,13 @@ import type Phaser from "phaser";
 import type { Basket } from "@/core/types";
 import { bracket } from "@/core/bracket";
 import { bindingDeployment, dwellYears, elevation, exposure, liquidationPrice, walletShape } from "@/core/kernel";
-import { fittedWindow, priceAt, rasterize } from "@/field/raster";
+import { priceAt, rasterize } from "@/field/raster";
+import { niceInterval } from "@/render/contours";
 import { extractFeatures } from "@/field/features";
 import { walkPaths } from "@/sim/paths";
-import { bandOf, buildTerrainGrid, mapFxOf, warpFx } from "@/game/terrain";
+import { bandOf, buildTerrainGrid, mapFxOf, surveyWindow, warpFx } from "@/game/terrain";
 import type { ZoneReading } from "@/game/events";
-import type { ScoutPath, Terrace, WorldData, WorldScene } from "@/game/WorldScene";
+import type { PriceTick, ScoutPath, WorldData, WorldScene } from "@/game/WorldScene";
 import type { FeedRow, PushedState, TerraceChart, UIScene } from "@/game/UIScene";
 
 interface Props {
@@ -26,6 +27,16 @@ interface Props {
   wallet: string | null;
   onReference: () => void;
   onPlate: () => void;
+}
+
+/** A defence terrace: a price band × dwell band the user raises by `liftHF`. */
+interface Terrace {
+  priceFxLo: number;
+  priceFxHi: number;
+  dwellFyLo: number;
+  dwellFyHi: number;
+  liftHF: number;
+  label: string;
 }
 
 const usd = (x: number | null) =>
@@ -52,7 +63,7 @@ export function ScreeGame(props: Props) {
   /* ── the book, measured ───────────────────────────────────────── */
 
   const br = useMemo(() => bracket(baskets, 0), [baskets]);
-  const win = useMemo(() => fittedWindow(spot, br.lower, br.upper), [spot, br]);
+  const win = useMemo(() => surveyWindow(spot, br.lower, br.upper), [spot, br]);
   const raster = useMemo(() => rasterize(baskets, win), [baskets, win]);
   const grid = useMemo(() => buildTerrainGrid(raster, baskets, spot), [raster, baskets, spot]);
   const features = useMemo(() => extractFeatures(raster), [raster]);
@@ -99,7 +110,18 @@ export function ScreeGame(props: Props) {
     [axes, baskets, grid.ceiling],
   );
 
-  /* ── the terrace: the user's defence, drawn on the ground ─────── */
+  /* ── the scale under the map: round prices, where they show ───── */
+
+  const ticks = useMemo<PriceTick[]>(() => {
+    const lo = priceAt(win, 0);
+    const hi = priceAt(win, win.width - 1);
+    const step = niceInterval(hi - lo, 7);
+    const out: PriceTick[] = [];
+    for (let p = Math.ceil(lo / step) * step; p < hi; p += step) out.push({ price: p, fx: mapFxOf(axes.fxOf(p), 0) });
+    return out;
+  }, [win, axes]);
+
+  /* ── the terrace: the user's defence, drawn in the reading panel ── */
 
   const terraces = useMemo<Terrace[]>(() => {
     if (br.lower === null) return [];
@@ -242,7 +264,7 @@ export function ScreeGame(props: Props) {
       const data: WorldData = {
         grid,
         readAt,
-        terraces,
+        axis: { ticks },
         ui: {
           fonts,
           getState: () => pushedRef.current,
@@ -276,7 +298,7 @@ export function ScreeGame(props: Props) {
       uiRef.current = null;
       game?.destroy(true);
     };
-  }, [grid, readAt, terraces]);
+  }, [grid, readAt, ticks]);
 
   return (
     <div className="scree">

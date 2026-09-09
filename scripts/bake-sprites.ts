@@ -357,7 +357,20 @@ function bakeFx(): Pix {
   window.fill(6, 5, 4, 6, rgb(255, 214, 120, 235));
   window.fill(7, 6, 2, 2, rgb(255, 244, 200, 255));
 
-  return sheet([bubble, droplet, spark, smoke, cog, orb, glow, window], 8, 16, 16);
+  // The surveyor's levelling staff: a pole, a crossbar, a sighting orb.
+  const staff = new Pix(16, 16);
+  staff.fill(7, 3, 2, 13, P.wood);
+  staff.fill(7, 3, 1, 13, P.woodLight);
+  staff.put(7, 15, P.woodDark);
+  staff.put(8, 15, P.woodDark);
+  staff.fill(5, 6, 6, 1, P.brass);
+  staff.put(5, 5, P.brass);
+  staff.put(10, 5, P.brass);
+  circle(staff, 8, 2.5, 2.2, P.leyDeep);
+  circle(staff, 8, 2.5, 1.4, P.ley);
+  staff.put(7, 1, P.leyBright);
+
+  return sheet([bubble, droplet, spark, smoke, cog, orb, glow, window, staff], 9, 16, 16);
 }
 
 /* ── the interface ───────────────────────────────────────────────────── */

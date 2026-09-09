@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { SHEET, SURVEYOR } from "./figures";
+import { FX, SHEET, SURVEYOR } from "./figures";
 import { LAYOUT } from "./layout";
 
 const SCALE = LAYOUT.scale;
@@ -13,7 +13,10 @@ const ANIM = (row: (typeof SURVEYOR.rows)[number]) => `surveyor-${row}`;
 export class Surveyor extends Phaser.GameObjects.Sprite {
   private readonly shadow: Phaser.GameObjects.Ellipse;
   private readonly mark: Phaser.GameObjects.Arc;
+  private readonly staff: Phaser.GameObjects.Image;
   private walk: Phaser.Tweens.Tween | undefined;
+  /** Which side the staff stands on: he carries it in his right hand. */
+  private facingLeft = false;
 
   static registerAnimations(scene: Phaser.Scene): void {
     SURVEYOR.rows.forEach((row, i) => {
@@ -35,6 +38,9 @@ export class Surveyor extends Phaser.GameObjects.Sprite {
     this.shadow = scene.add.ellipse(x, y - SCALE, SCALE * 11, SCALE * 4, 0x000000, 0.38).setDepth(depth - 0.2);
     this.mark = scene.add.circle(x, y - SCALE, SCALE * 4, 0x35e0e8, 0).setStrokeStyle(2, 0x35e0e8, 0.7).setDepth(depth - 0.1);
     scene.tweens.add({ targets: this.mark, scale: { from: 0.7, to: 2.2 }, alpha: { from: 0.8, to: 0 }, duration: 2000, repeat: -1, ease: "Quad.Out" });
+    this.staff = scene.add.image(x, y, SHEET.fx, FX.staff).setOrigin(0.5, 1).setScale(SCALE * 1.1).setDepth(depth + 0.001);
+    // Breathing: a slow rise of the shoulders, from the feet.
+    scene.tweens.add({ targets: this, scaleY: { from: SCALE * 1.1, to: SCALE * 1.1 * 1.035 }, duration: 1600, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.play(ANIM("idle"));
   }
 
@@ -42,6 +48,8 @@ export class Surveyor extends Phaser.GameObjects.Sprite {
     super.preUpdate(time, delta);
     this.shadow.setPosition(this.x, this.y - SCALE);
     this.mark.setPosition(this.x, this.y - SCALE);
+    this.staff.setPosition(this.x + (this.facingLeft ? -1 : 1) * SCALE * 6.5, this.y);
+    this.staff.setFlipX(this.facingLeft);
   }
 
   get walking(): boolean {
@@ -55,6 +63,7 @@ export class Surveyor extends Phaser.GameObjects.Sprite {
     const dy = y - this.y;
     const dist = Math.hypot(dx, dy);
     const dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "walk_left" : "walk_right") : dy < 0 ? "walk_up" : "walk_down";
+    this.facingLeft = dir === "walk_left";
     this.play(ANIM(dir), true);
     this.walk = this.scene.tweens.add({
       targets: this,
@@ -72,6 +81,7 @@ export class Surveyor extends Phaser.GameObjects.Sprite {
   override destroy(fromScene?: boolean): void {
     this.shadow.destroy();
     this.mark.destroy();
+    this.staff.destroy();
     super.destroy(fromScene);
   }
 }

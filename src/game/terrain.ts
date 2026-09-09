@@ -1,5 +1,5 @@
 import type { Raster } from "../field/raster";
-import { colOfPrice, dwellAt, priceAt } from "../field/raster";
+import { colOfPrice, dwellAt, priceAt, windowAt, type Window } from "../field/raster";
 import type { Basket, Exposure } from "../core/types";
 import { dwellYears, exposure, healthFactor, liquidationPrice } from "../core/kernel";
 import { footprintFor, type Footprint } from "./holdfasts";
@@ -28,8 +28,8 @@ export const RELIEF = {
   warp: 0.055,
   warpFreq: { x: 2.4, y: 1.6 },
   /** Height noise on land and under the sea, as a fraction of the ceiling. */
-  amplitude: 0.26,
-  frequency: 3.4,
+  amplitude: 0.3,
+  frequency: 3.0,
   octaves: 3,
   /** Height, as a fraction of the ceiling, over which the noise fades in from sea level. */
   shoreGuard: 0.22,
@@ -109,38 +109,63 @@ export function heightAt(raster: Raster, baskets: readonly Basket[], col: number
 export const TILE_PX = 4;
 
 export enum Band {
+  /** The abyss beyond the shelf: health far below one. */
+  ABYSS = 0,
   /** Deep water: health well below one. The leviathans live here. */
-  DEEP = 0,
+  DEEP = 1,
   /** The shelf just under the surface: liquidated, but only just. */
-  SHALLOW = 1,
+  SHALLOW = 2,
   /** Beach, mudflat, driftwood: the first dry ground. */
-  COAST = 2,
+  COAST = 3,
   /** Lowland plains. */
-  GRASS = 3,
+  GRASS = 4,
   /** Midland pine forest and rock. */
-  FOREST = 4,
+  FOREST = 5,
   /** Bare stone. */
-  MOUNTAIN = 5,
+  MOUNTAIN = 6,
   /** Snow and aether on the crest. */
-  SNOW = 6,
+  SNOW = 7,
 }
-export const BAND_COUNT = 7;
+export const BAND_COUNT = 8;
 
 /**
- * Elevation thresholds. Water is split at an absolute depth; the dry bands
- * are fractions of the ceiling (the book's maximum health-factor headroom).
+ * Elevation thresholds. The dry bands are fractions of the ceiling (the
+ * book's maximum health-factor headroom): the rock takes a broad band so the
+ * ridge reads as a range, and snow caps only the crest. The water bands are
+ * fractions of the floor (the deepest reading in the window), so every book
+ * has a shelf, a deep and an abyss however deep its sea goes.
  */
-export const THRESHOLDS = { shallow: -0.06, coast: 0.05, grass: 0.5, forest: 0.8, mountain: 0.95 } as const;
+export const THRESHOLDS = { coast: 0.05, grass: 0.4, forest: 0.62, snow: 0.9 } as const;
+export const DEPTHS = { shallow: 0.18, deep: 0.5 } as const;
 
-export function bandOf(z: number, ceiling: number): Band {
+/**
+ * The window the survey draws: the survivable bracket takes about two thirds
+ * of the width, with real sea on both sides, on a landscape-shaped field.
+ */
+export function surveyWindow(spot: number, lower: number | null, upper: number | null): Window {
+  const size = { width: 320, height: 208 };
+  const low = lower ?? spot * 0.72;
+  const high = upper ?? spot * 1.38;
+  if (!(low > 0) || !(high > low)) return windowAt(spot, size);
+  const centre = Math.sqrt(low * high);
+  const padded = Math.log(high / low) / 2 / 0.68;
+  return windowAt(spot, { ...size, priceLow: (centre * Math.exp(-padded)) / spot - 1, priceHigh: (centre * Math.exp(padded)) / spot - 1 });
+}
+
+/** `floor` is the deepest reading in the window (negative); `ceiling` the highest. */
+export function bandOf(z: number, ceiling: number, floor = -1): Band {
   if (!Number.isFinite(z)) return Band.SNOW;
-  if (z < THRESHOLDS.shallow) return Band.DEEP;
-  if (z < 0) return Band.SHALLOW;
+  if (z < 0) {
+    const d = z / Math.min(-1e-9, floor);
+    if (d > DEPTHS.deep) return Band.ABYSS;
+    if (d > DEPTHS.shallow) return Band.DEEP;
+    return Band.SHALLOW;
+  }
   const t = z / Math.max(1e-9, ceiling);
   if (t < THRESHOLDS.coast) return Band.COAST;
   if (t < THRESHOLDS.grass) return Band.GRASS;
   if (t < THRESHOLDS.forest) return Band.FOREST;
-  if (t < THRESHOLDS.mountain) return Band.MOUNTAIN;
+  if (t < THRESHOLDS.snow) return Band.MOUNTAIN;
   return Band.SNOW;
 }
 
@@ -237,6 +262,7 @@ function fieldColForCornerCol(cx: number, cols: number, fieldW: number): number 
 export function buildTerrainGrid(raster: Raster, baskets: readonly Basket[], spot: number): TerrainGrid {
   const { width: fw, height: fh } = raster.window;
   const ceiling = Math.max(0.05, raster.range.max);
+  const floor = Math.min(-0.03, raster.range.min);
   const cols = Math.ceil(fw / TILE_PX);
   const rows = Math.ceil(fh / TILE_PX);
 
@@ -249,7 +275,7 @@ export function buildTerrainGrid(raster: Raster, baskets: readonly Basket[], spo
       const col = fieldColForCornerCol(cx, cols, fw);
       const h = heightAt(raster, baskets, col, row, ceiling);
       heights[cy * (cols + 1) + cx] = h.z;
-      corners[cy * (cols + 1) + cx] = bandOf(h.z, ceiling);
+      corners[cy * (cols + 1) + cx] = bandOf(h.z, ceiling, floor);
     }
   }
   const cornerAt = (cx: number, cy: number): Band => corners[cy * (cols + 1) + cx]! as Band;
