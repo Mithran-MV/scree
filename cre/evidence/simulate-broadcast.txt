@@ -1,0 +1,37 @@
+# cre workflow simulate guardian --target staging-settings --non-interactive --trigger-index 0 --broadcast --evm-receipt-timeout 3m
+# 2026-09-09T14:13:33Z
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: a0b538455471dd642dca557ee04752468f34bb7f22521c8947bc48a09f9933e3
+  Config hash: b18ff3561dcba1ad3cbc2abf5eda458d5da257e56f7b5a35210e5dad84b3afb4
+2026-09-09T19:43:37Z [SIMULATION] Simulator Initialized
+
+2026-09-09T19:43:37Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+╭────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Trigger requested TEE Execution your trigger will run in one of the following Tees:                │
+│     - AWS Nitro in us-west-2                                                                       │
+│ The simulator is not a real TEE, and is meant to debug.                                            │
+│ Do not use it for sensitive information.                                                           │
+│ During real execution, user logs for this trigger will not be visible, and will not leave the TEE. │
+│ They are presented in the simulator for debugging only.                                            │
+│                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+2026-09-09T19:43:38Z [USER LOG] Enclave decision for 0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4: RAISE
+
+✓ Workflow Simulation Result:
+"RAISE (lift 0.161 health) recorded on ethereum-testnet-sepolia, tx 0xfec5e38b052986a5d00f611164f630835d5ac26d654d130328f0e8e13ee11d49"
+
+2026-09-09T19:44:02Z [SIMULATION] Execution finished signal received
+2026-09-09T19:44:02Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯
