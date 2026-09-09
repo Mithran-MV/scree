@@ -1,0 +1,11 @@
+{
+  "schedule": "0 */5 * * * *",
+  "surveyUrl": "https://scree.hacklabs.in/api/terrain",
+  "wallet": "0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4",
+  "policySecretId": "TERRACE_POLICY",
+  "evm": {
+    "chainSelectorName": "ethereum-testnet-sepolia",
+    "guardian": "0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66",
+    "gasLimit": "300000"
+  }
+}

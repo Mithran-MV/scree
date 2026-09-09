@@ -1,0 +1,10 @@
+# npm run guardian:read -- 0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4 0xfec5e38b052986a5d00f611164f630835d5ac26d654d130328f0e8e13ee11d49
+# 2026-09-09T14:14:02Z
+guardian     0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66 on Sepolia, 2 verdicts, trusts KeystoneForwarder and MockKeystoneForwarder
+wallet       0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4
+latest       RAISE  health 1.47  lift 0.16
+observed     2026-09-09T14:13:38.000Z
+recorded     2026-09-09T14:14:00.000Z
+delivery     success, block 11668459, from 0x28ddb40daefbd8f46d01ae741b3f09a06e4c43d5 via 0x15fc6ae953e024d975e77382eeec56a9101f9f88
+event        VerdictRecorded {"wallet":"0xb7B7eb7E9611975Bc9715F22ce7e6Ee288296fd4","verdict":1,"healthBps":14700,"liftBps":1600,"observedAt":"1788963218"}
+explorer     https://sepolia.etherscan.io/tx/0xfec5e38b052986a5d00f611164f630835d5ac26d654d130328f0e8e13ee11d49

@@ -218,6 +218,27 @@ is pinned to Blocky402 for both networks; the reference implementation's
 testnet default is a different facilitator, and that is easy to inherit by
 accident.
 
+## The private terrace
+
+The owner of a wallet has a line in the field: the health they refuse to fall
+below, the price they refuse to be liquidated above, how much of a lift they
+will buy. If that line were public, so would be the level at which to push.
+`cre/` holds a Confidential Workflow for the
+[Chainlink Runtime Environment](https://docs.chain.link/cre) that keeps it
+private: a handler registered with `handlerInTee` fetches the policy as a
+Vault DON secret inside the enclave, fetches the wallet's survey from inside
+the enclave, decides `HOLD`, `RAISE` or `DROWNED` with the same kernel the map
+uses, and crosses back to the DON with the verdict, a coarse health and the
+lift, nothing else. The DON signs it and a forwarder delivers it to the
+`Guardian` ledger on Sepolia.
+
+It runs in the CRE simulator, and with `--broadcast` the verdict lands on the
+real ledger; `cre/evidence/` holds transcripts of both and the ledger read
+back. The ledger is at
+[`0x9e87c0d9…7c66`](https://sepolia.etherscan.io/address/0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66),
+and `npm run guardian:read` prints its latest verdict for a wallet. See
+[`cre/README.md`](cre/README.md) for the flow and the arithmetic.
+
 ## The geometry gate
 
 It is easy to write a renderer that draws convincing creases over terrain that
@@ -304,6 +325,8 @@ registry row.
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
 | `npm run hedera:topic` | create the HCS topic that receives survey receipts |
 | `npm run scout -- --address 0x…` | an agent that discovers, pays for and verifies a survey |
+| `npm run guardian:deploy` | compile and deploy the verdict ledger to Sepolia |
+| `npm run guardian:read` | read the ledger's latest verdict for a wallet |
 | `npm run bake:sprites` | regenerate the baked sheets under `public/assets/scree/` |
 | `npm run build` | production build |
 
@@ -330,6 +353,7 @@ with borders before connecting your own wallet:
 | `src/survey` | the survey itself, shared by the free route and the paid one |
 | `src/x402` | the price schedule and the payment gate |
 | `src/hedera` | receipts on the Consensus Service |
+| `cre` | the confidential workflow, its ledger contract, and the evidence of its runs |
 | `src/field` | the raster and its features |
 | `src/render` | contours, hachures and the survey plate |
 | `src/sim` | the price walks the scouts follow |

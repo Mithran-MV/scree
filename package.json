@@ -14,6 +14,8 @@
     "verify:subgraphs": "tsx scripts/verify-subgraphs.ts",
     "hedera:topic": "tsx scripts/new-topic.ts",
     "scout": "tsx scripts/scout.ts",
+    "guardian:deploy": "tsx scripts/deploy-guardian.ts",
+    "guardian:read": "tsx scripts/read-guardian.ts",
     "dev": "next dev",
     "build": "NEXT_DIST_DIR=.next-build next build",
     "start": "NEXT_DIST_DIR=.next-build next start",
@@ -23,6 +25,7 @@
     "@types/node": "^22.20.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "solc": "^0.8.28",
     "tsx": "^4.23.13",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
