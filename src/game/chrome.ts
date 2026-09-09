@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { dprIn } from "./screen";
 import { T, FONT_MONO } from "./theme";
 
 /**
@@ -43,21 +44,16 @@ export interface LabelOptions {
 export function label(scene: Phaser.Scene, x: number, y: number, text: string, options: LabelOptions = {}): Phaser.GameObjects.Text {
   const t = scene.add.text(options.crisp ? Math.round(x) : x, options.crisp ? Math.round(y) : y, text, {
     fontFamily: options.font ?? FONT_MONO,
-    fontSize: `${options.size ?? 11}px`,
+    fontSize: `${options.size ?? 12}px`,
     color: hex(options.color ?? T.ink),
     align: options.align ?? "left",
   });
   t.setAlpha(options.alpha ?? 1);
-  // The game runs with pixelArt on, which is right for the sprites and wrong
-  // for type: text canvases would be sampled nearest-neighbour at 1x. Render
-  // them at device resolution and filter them linearly.
-  if (options.crisp) {
-    t.setResolution(1);
-    t.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
-  } else {
-    t.setResolution(Math.min(2, window.devicePixelRatio || 1));
-    t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-  }
+  // The screen camera zooms by the device density, so type is rasterised at
+  // that density and lands one glyph pixel on one screen pixel. Pixel faces
+  // are sampled nearest so their grid stays square; everything else linear.
+  t.setResolution(dprIn(scene));
+  t.texture.setFilter(options.crisp ? Phaser.Textures.FilterMode.NEAREST : Phaser.Textures.FilterMode.LINEAR);
   if (options.tracking) t.setLetterSpacing(options.tracking);
   if (options.stroke) t.setStroke(hex(options.stroke.color), options.stroke.thickness);
   if (options.shadow) t.setShadow(2, 2, hex(T.shellEdge), 0, true, true);
@@ -70,6 +66,7 @@ export function label(scene: Phaser.Scene, x: number, y: number, text: string, o
 export interface ButtonOptions {
   tone?: number | undefined;
   width?: number | undefined;
+  height?: number | undefined;
   onClick?: (() => void) | undefined;
   enabled?: boolean | undefined;
   font?: string | undefined;
@@ -83,12 +80,16 @@ function lighten(colour: number, t: number): number {
   return (Math.round(r + (255 - r) * t) << 16) | (Math.round(g + (255 - g) * t) << 8) | Math.round(b + (255 - b) * t);
 }
 
+/**
+ * Every button is the same stock in the same brass, whatever it does; a
+ * control does not shout by colour. The only states are rest, hover, off.
+ */
 export function button(scene: Phaser.Scene, x: number, y: number, text: string, options: ButtonOptions = {}): Phaser.GameObjects.Container {
-  const tone = options.tone ?? T.ley;
+  const tone = options.tone ?? T.brass;
   const enabled = options.enabled ?? true;
-  const t = label(scene, 0, 0, text, { size: 11, color: T.ink, tracking: 1.2, font: options.font });
+  const t = label(scene, 0, 0, text, { size: 12, color: T.ink, tracking: 0.6, font: options.font });
   const w = options.width ?? t.width + 26;
-  const h = 26;
+  const h = options.height ?? 28;
 
   const face = nine(scene, UI.button, 0, 0, w, h, 8);
   face.setTint(enabled ? lighten(tone, 0.1) : 0x556066);

@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import { UI, button, label, nine } from "./chrome";
 import { loadUiStock } from "./assets";
 import { WebFontFile } from "./fonts";
-import { LAYOUT, mapViewport } from "./layout";
+import { layoutFor, type Layout, type Rect } from "./layout";
+import { logical, pinToScreen } from "./screen";
 import {
   EV,
   type ArriveEvent,
@@ -71,6 +72,9 @@ export interface UIData {
 /** Depth plan for the interface: everything above the world, pop-ups on top. */
 const UI_DEPTH = { frame: 90, column: 92, banners: 93, bar: 95, plate: 96, hover: 100, popup: 100 } as const;
 
+/** Type sizes, in CSS pixels. Pixel-face kickers stay on their 8px grid. */
+const TYPE = { kicker: 8, title: 17, body: 12.5, feedKey: 13, feedValue: 12, log: 12.5, caption: 10, small: 10 } as const;
+
 interface Banner {
   anchor: Anchor;
   box: Phaser.GameObjects.Container;
@@ -90,12 +94,14 @@ const days = (d: number) => (d < 1 ? `${Math.round(d * 24)}h` : `${d.toFixed(1)}
  * the title plate, the live feed, the terrace chart, the hover box and the
  * pop-ups. Every box is a nine-slice of baked pixel-art stock. It draws no
  * terrain and holds no arithmetic; it listens to the world and to the page,
- * and it calls the actions it was handed.
+ * and it calls the actions it was handed. Its geometry comes from one shared
+ * layout, wide or narrow, that the page also reads.
  */
 export class UIScene extends Phaser.Scene {
   private opts!: UIData;
   private state!: UIState;
   private world!: WorldScene;
+  private lay!: Layout;
 
   private bar!: Phaser.GameObjects.Container;
   private frame!: Phaser.GameObjects.Container;
@@ -176,7 +182,7 @@ export class UIScene extends Phaser.Scene {
     for (const b of this.banners) b.box.destroy();
     for (const t of this.axisLabels) t.destroy();
     this.banners = this.world.holdfasts.map((anchor) => {
-      const text = label(this, 0, 0, `${anchor.deploymentId} · ${Math.round(anchor.share * 100)}%`, { size: 8, font: f.pixel, color: T.vellumInk, crisp: true });
+      const text = label(this, 0, 0, `${anchor.deploymentId} · ${Math.round(anchor.share * 100)}%`, { size: TYPE.kicker, font: f.pixel, color: T.vellumInk, crisp: true });
       const w = Math.round(text.width) + 38;
       const h = 26;
       const flag = this.add.rectangle(11, 8, 8, 10, anchor.colour).setOrigin(0, 0);
@@ -188,20 +194,26 @@ export class UIScene extends Phaser.Scene {
       return banner;
     });
     this.axisLabels = this.world.axisTicks.map((tick) =>
-      label(this, 0, 0, `$${tick.price.toLocaleString("en-US")}`, { size: 8, font: f.pixel, color: T.vellumInk, crisp: true, align: "center" }).setDepth(UI_DEPTH.banners),
+      label(this, 0, 0, `$${tick.price.toLocaleString("en-US")}`, { size: TYPE.kicker, font: f.pixel, color: T.vellumInk, crisp: true, align: "center" }).setDepth(UI_DEPTH.banners),
     );
   }
 
   override update() {
+    if (!this.lay) return;
     const cam = this.world.cameras.main;
-    const v = mapViewport(this.scale.width, this.scale.height);
-    const sx = (wx: number) => cam.x + (wx - cam.worldView.x) * cam.zoom;
-    const sy = (wy: number) => cam.y + (wy - cam.worldView.y) * cam.zoom;
+    const { D } = logical(this);
+    const v = this.lay.map;
+    // The world camera works in device pixels; this scene in CSS pixels.
+    const sx = (wx: number) => (cam.x + (wx - cam.worldView.x) * cam.zoom) / D;
+    const sy = (wy: number) => (cam.y + (wy - cam.worldView.y) * cam.zoom) / D;
     for (const b of this.banners) {
       const x = sx(b.anchor.x);
       const y = sy(b.anchor.top) - 8 + b.bob;
-      const inside = x > v.x - b.w && x < v.x + v.w + b.w && y > v.y && y < v.y + v.h;
-      b.box.setVisible(inside).setPosition(Math.round(x - b.w / 2), Math.round(y - b.h));
+      const left = Math.round(x - b.w / 2);
+      const top = Math.round(y - b.h);
+      // A banner is shown whole or not at all: nothing of it may lie on the bezel.
+      const inside = left >= v.x && left + b.w <= v.x + v.w && top >= v.y && top + b.h <= v.y + v.h;
+      b.box.setVisible(inside).setPosition(left, top);
     }
     this.world.axisTicks.forEach((tick, i) => {
       const t = this.axisLabels[i]!;
@@ -214,6 +226,8 @@ export class UIScene extends Phaser.Scene {
 
   /** Replace part of the state and redraw what shows it. */
   setState(next: Partial<UIState>) {
+    // The page may push before the scene has started; the first state then comes through init.
+    if (!this.state) return;
     const before = new Set(this.state.notes);
     this.state = { ...this.state, ...next };
     for (const line of this.state.notes) {
@@ -228,6 +242,9 @@ export class UIScene extends Phaser.Scene {
   /* ── layout ───────────────────────────────────────────────────────── */
 
   private layout() {
+    const { W, H, D } = logical(this);
+    pinToScreen(this.cameras.main, D);
+    this.lay = layoutFor(W, H);
     this.drawBar();
     this.drawFrame();
     this.drawPlate();
@@ -237,28 +254,31 @@ export class UIScene extends Phaser.Scene {
 
   /** The top bar: dark ashlar across the whole width, the title cut into it. */
   private drawBar() {
-    const W = this.scale.width;
+    const { W, narrow, compact, topBar } = this.lay;
     const f = this.opts.fonts;
+    const s = this.state;
     this.bar.removeAll(true);
-    const ground = this.add.tileSprite(0, 0, W, LAYOUT.topBar, UI.topbar).setOrigin(0, 0);
+    const ground = this.add.tileSprite(0, 0, W, topBar, UI.topbar).setOrigin(0, 0);
     this.bar.add(ground);
-    this.bar.add(label(this, 18, 8, "SCREE", { size: 24, font: f.pixel, color: T.vellum, stroke: { color: T.shellEdge, thickness: 6 }, shadow: true, crisp: true }));
-    this.bar.add(label(this, 160, 18, "LIQUIDATION TOPOGRAPHY", { size: 8, font: f.pixel, color: T.ley, tracking: 2, stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
-    this.bar.add(label(this, W - 18, 18, this.state.headline, { size: 8, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
+    const titleSize = narrow ? 16 : 24;
+    this.bar.add(label(this, 14, Math.round((topBar - titleSize) / 2) - 2, "SCREE", { size: titleSize, font: f.pixel, color: T.vellum, stroke: { color: T.shellEdge, thickness: narrow ? 4 : 6 }, shadow: true, crisp: true }));
+    if (!compact) {
+      this.bar.add(label(this, narrow ? 112 : 160, Math.round(topBar / 2) - 4, "LIQUIDATION TOPOGRAPHY", { size: TYPE.kicker, font: f.pixel, color: T.ley, tracking: 2, stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
+    }
+    const headline = narrow ? s.label : s.headline;
+    this.bar.add(label(this, W - 14, Math.round(topBar / 2) - 4, headline, { size: TYPE.kicker, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
   }
 
   /** The bezel: housing around the map viewport under the bar, and the inset lines that make it read as glass. */
   private drawFrame() {
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const v = mapViewport(W, H);
+    const { W, H, topBar, map: v } = this.lay;
     this.frame.removeAll(true);
     const housing = this.add.graphics();
     housing.fillStyle(T.shellDark, 1);
-    housing.fillRect(0, LAYOUT.topBar, W, v.y - LAYOUT.topBar);
+    housing.fillRect(0, topBar, W, v.y - topBar);
     housing.fillRect(0, v.y + v.h, W, H - v.y - v.h);
-    housing.fillRect(0, LAYOUT.topBar, v.x, H - LAYOUT.topBar);
-    housing.fillRect(v.x + v.w, LAYOUT.topBar, W - v.x - v.w, H - LAYOUT.topBar);
+    housing.fillRect(0, topBar, v.x, H - topBar);
+    housing.fillRect(v.x + v.w, topBar, W - v.x - v.w, H - topBar);
     housing.lineStyle(2, T.shellLit, 0.7);
     housing.strokeRoundedRect(v.x - 5, v.y - 5, v.w + 10, v.h + 10, 4);
     housing.lineStyle(1, T.shellEdge, 1);
@@ -266,47 +286,58 @@ export class UIScene extends Phaser.Scene {
     this.frame.add(housing);
   }
 
-  /** The title plate, pinned inside the north-west corner of the screen. */
+  /** The title plate, pinned inside the north-west corner of the map. Narrow screens have no room for it. */
   private drawPlate() {
-    const v = mapViewport(this.scale.width, this.scale.height);
+    const { map: v, narrow } = this.lay;
     const f = this.opts.fonts;
     this.plate.removeAll(true);
-    const w = 272;
+    if (narrow) return;
+    const w = 288;
     const pad = 14;
-    const kicker = label(this, pad, pad - 2, "THE SCREE SURVEY", { size: 8, font: f.pixel, color: T.vellumInkDim, crisp: true });
-    const title = label(this, pad, pad + 12, "Liquidation Topography", { size: 15, font: f.display, color: T.vellumInk });
-    const blurb = label(this, pad, pad + 36, "Elevation is health. Sea level is liquidation. West to east is price; north is how long it held.", {
-      size: 10,
+    const kicker = label(this, pad, pad - 2, "THE SCREE SURVEY", { size: TYPE.kicker, font: f.pixel, color: T.vellumInkDim, crisp: true });
+    const title = label(this, pad, pad + 12, "Liquidation Topography", { size: TYPE.title, font: f.display, color: T.vellumInk });
+    const blurb = label(this, pad, pad + 40, "Elevation is health. Sea level is liquidation. West to east is price; north is how long it held.", {
+      size: TYPE.body,
       font: f.serif,
       color: T.vellumInkDim,
       wrap: w - pad * 2,
     });
-    const h = pad + 36 + blurb.height + pad - 2;
+    const h = pad + 40 + blurb.height + pad - 2;
     this.plate.setPosition(v.x + 14, v.y + 14);
     this.plate.add([nine(this, UI.panel, 0, 0, w, h), kicker, title, blurb]);
   }
 
   /**
-   * The reading panel, pinned to the south-west corner of the screen: what
-   * the ground under the pointer says, with the terrace-depth graph set into
-   * its right-hand side, sized to its text and never larger than it needs.
+   * The reading panel, pinned to the south-west corner of the map: what the
+   * ground under the pointer says, with the terrace-depth graph set into its
+   * right-hand side when there is room, sized to its text and never larger
+   * than it needs.
    */
   private showHover(title: string, body: string) {
-    const v = mapViewport(this.scale.width, this.scale.height);
+    const { map: v, narrow } = this.lay;
     const f = this.opts.fonts;
     const pad = 14;
-    const textW = 236;
+    const inset = narrow ? 8 : 14;
+    const maxW = v.w - inset * 2;
     const chartW = 132;
     const chartH = 68;
-    const w = pad + textW + 12 + chartW + pad;
+    const withChart = maxW >= 380;
+    const textW = withChart ? Math.min(250, maxW - chartW - 12 - pad * 2) : Math.min(360, maxW - pad * 2);
+    const w = withChart ? pad + textW + 12 + chartW + pad : pad + textW + pad;
     this.hover.removeAll(true);
-    const t = label(this, pad, pad - 3, title, { size: 8, font: f.pixel, color: T.vellumInk, wrap: textW, crisp: true });
-    const b = label(this, pad, pad + t.height + 4, body, { size: 11, font: f.serif, color: T.vellumInkDim, wrap: textW });
-    const block = Math.max(t.height + 4 + b.height, chartH + 12);
-    const caption = label(this, pad, pad + block + 6, this.state.chart.note, { size: 8.5, font: f.mono, color: T.vellumInk, wrap: w - pad * 2 });
-    const h = pad + block + 6 + (this.state.chart.note ? caption.height : 0) + pad - 2;
-    this.hover.setPosition(v.x + 14, v.y + v.h - 14 - h);
-    this.hover.add([nine(this, UI.panel, 0, 0, w, h), t, b, caption, ...this.miniChart(pad + textW + 12, pad, chartW, chartH)]);
+    const t = label(this, pad, pad - 3, title, { size: TYPE.kicker, font: f.pixel, color: T.vellumInk, wrap: textW, crisp: true });
+    const b = label(this, pad, pad + t.height + 5, body, { size: TYPE.body, font: f.serif, color: T.vellumInkDim, wrap: textW });
+    const block = Math.max(t.height + 5 + b.height, withChart ? chartH + 12 : 0);
+    const showCaption = Boolean(this.state.chart.note) && !narrow;
+    const caption = showCaption
+      ? label(this, pad, pad + block + 6, this.state.chart.note, { size: TYPE.caption, font: f.mono, color: T.vellumInk, wrap: w - pad * 2 })
+      : null;
+    const h = pad + block + (caption ? 6 + caption.height : 0) + pad - 2;
+    this.hover.setPosition(v.x + inset, v.y + v.h - inset - h);
+    const parts: Phaser.GameObjects.GameObject[] = [nine(this, UI.panel, 0, 0, w, h), t, b];
+    if (caption) parts.push(caption);
+    if (withChart) parts.push(...this.miniChart(pad + textW + 12, pad, chartW, chartH));
+    this.hover.add(parts);
   }
 
   /** Terrace depth in miniature: the crash edge against dwell, the proposed band shaded, the lifted curve beneath. */
@@ -318,7 +349,7 @@ export class UIScene extends Phaser.Scene {
     g.fillRect(x, y + 12, w, h - 12);
     g.lineStyle(1, T.vellumEdge, 0.7);
     g.strokeRect(x, y + 12, w, h - 12);
-    const head = label(this, x, y - 3, "TERRACE DEPTH", { size: 8, font: f.pixel, color: T.vellumInkDim, crisp: true });
+    const head = label(this, x, y - 3, "TERRACE DEPTH", { size: TYPE.kicker, font: f.pixel, color: T.vellumInkDim, crisp: true });
     if (curve.length < 2) return [g, head];
     const px = x + 4;
     const py = y + 16;
@@ -343,79 +374,86 @@ export class UIScene extends Phaser.Scene {
     };
     stroke(curve, T.peril);
     if (lifted) stroke(lifted, T.leyDim);
-    const axis = label(this, x + w, y + h - 9, `${Math.round(tMax)}d`, { size: 7, font: f.mono, color: T.vellumInkDim, align: "right" });
+    const axis = label(this, x + w, y + h - 10, `${Math.round(tMax)}d`, { size: 9, font: f.mono, color: T.vellumInkDim, align: "right" });
     return [g, head, axis];
   }
 
-  /** The instrument column on the right: controls, feed, log, chart. */
+  /** The instrument column: controls, feed, log. Beside the map, or under it. */
   private drawColumn() {
-    const W = this.scale.width;
-    const H = this.scale.height;
+    const { H, narrow, column, slot, survey, buttons, buttonLabels, feedTop, frame } = this.lay;
     const f = this.opts.fonts;
     const s = this.state;
-    const x0 = W - LAYOUT.uiRight + 8;
-    const cw = LAYOUT.uiRight - 16;
+    const x0 = column.x + 8;
+    const cw = column.w - 16;
     const pad = 12;
-    const half = (cw - 24) / 2;
     this.column.removeAll(true);
 
+    const add = (r: Rect, text: string, onClick: () => void, enabled = true) =>
+      this.column.add(button(this, r.x, r.y, text, { width: r.w, height: r.h, onClick, enabled }));
+
     // Address slot (the page lays a real input over it) and the survey button.
-    let y = LAYOUT.topBar + LAYOUT.frame + 4;
-    this.column.add(nine(this, UI.console, x0 + 8, y, cw - 16 - 70, 30));
-    this.column.add(button(this, x0 + cw - 8 - 62, y + 2, s.busy ? "…" : "Survey", { width: 62, tone: T.peril, onClick: this.opts.actions.survey, enabled: !s.busy }));
+    this.column.add(nine(this, UI.console, slot.x, slot.y, slot.w, slot.h));
+    add(survey, s.busy ? "…" : "Survey", this.opts.actions.survey, !s.busy);
 
-    y += 40;
-    const walletText = s.wallet ? `${s.wallet.slice(0, 6)}…${s.wallet.slice(-4)}` : "Connect wallet";
-    this.column.add(button(this, x0 + 8, y, walletText, { width: half, tone: T.brass, onClick: this.opts.actions.connect, enabled: !s.busy }));
-    this.column.add(button(this, x0 + 8 + half + 8, y, "Reference book", { width: half, onClick: this.opts.actions.reference }));
-    y += 32;
-    this.column.add(
-      button(this, x0 + 8, y, s.scoutsBusy ? "Scouts out…" : "Send 200 scouts", {
-        width: half,
-        tone: T.peril,
-        enabled: !s.scoutsBusy,
-        onClick: () => {
-          this.setState({ scoutsBusy: true });
-          this.opts.actions.scouts();
-        },
-      }),
+    const long = buttonLabels === "long";
+    const walletText = s.wallet ? `${s.wallet.slice(0, 6)}…${s.wallet.slice(-4)}` : long ? "Connect wallet" : "Wallet";
+    add(buttons[0]!, walletText, this.opts.actions.connect, !s.busy);
+    add(buttons[1]!, long ? "Reference book" : "Book", this.opts.actions.reference);
+    add(
+      buttons[2]!,
+      s.scoutsBusy ? (long ? "Scouts out…" : "Out…") : long ? "Send 200 scouts" : "Scouts",
+      () => {
+        this.setState({ scoutsBusy: true });
+        this.opts.actions.scouts();
+      },
+      !s.scoutsBusy,
     );
-    this.column.add(button(this, x0 + 8 + half + 8, y, "Survey plate", { width: half, onClick: this.opts.actions.plate }));
-    y += 36;
+    add(buttons[3]!, long ? "Survey plate" : "Plate", this.opts.actions.plate);
 
+    let y = feedTop;
     if (s.error) {
-      const err = label(this, x0 + 8, y, s.error, { size: 10, color: T.perilBright, font: f.mono, wrap: cw - 16 });
+      const err = label(this, x0 + 8, y, s.error, { size: TYPE.small, color: T.perilBright, font: f.mono, wrap: cw - 16 });
       this.column.add(err);
       y += err.height + 8;
     }
 
-    // Live feed.
-    const feedH = 32 + s.feed.length * 19 + 6;
+    // Live feed: one column of key and value, or two side by side when the column is under the map.
+    const rowH = narrow ? 18 : 20;
+    const cols = narrow ? 2 : 1;
+    const rows = Math.ceil(s.feed.length / cols);
+    const feedH = 30 + rows * rowH + 6;
     this.column.add(nine(this, UI.console, x0, y, cw, feedH));
-    this.column.add(label(this, x0 + pad, y + 11, "LIVE FEED", { size: 8, font: f.pixel, color: T.ley, crisp: true }));
-    this.column.add(label(this, x0 + cw - pad, y + 11, s.label, { size: 9, color: T.inkDim, align: "right", font: f.mono }));
-    let fy = y + 32;
-    for (const row of s.feed) {
+    this.column.add(label(this, x0 + pad, y + 10, "LIVE FEED", { size: TYPE.kicker, font: f.pixel, color: T.ley, crisp: true }));
+    if (!narrow) this.column.add(label(this, x0 + cw - pad, y + 10, s.label, { size: TYPE.small, color: T.inkDim, align: "right", font: f.mono }));
+    const colW = (cw - pad * 2 - (cols - 1) * 12) / cols;
+    s.feed.forEach((row, i) => {
+      const c = i % cols;
+      const r = Math.floor(i / cols);
+      const rx = x0 + pad + c * (colW + 12);
+      const ry = y + 30 + r * rowH;
       const tone = row.tone === "peril" ? T.perilBright : row.tone === "ley" ? T.ley : T.ink;
-      this.column.add(label(this, x0 + pad, fy, row.key, { size: 11.5, color: T.inkDim, font: f.serif }));
-      this.column.add(label(this, x0 + cw - pad, fy, row.value, { size: 11, color: tone, align: "right", font: f.mono }));
-      fy += 19;
-    }
+      this.column.add(label(this, rx, ry, row.key, { size: narrow ? 11.5 : TYPE.feedKey, color: T.inkDim, font: f.serif }));
+      this.column.add(label(this, rx + colW, ry + 1, row.value, { size: narrow ? 11 : TYPE.feedValue, color: tone, align: "right", font: f.mono }));
+    });
     y += feedH + 8;
 
     // The log: what happened on the ground, newest first, filling what remains of the column.
-    const logH = Math.max(120, H - y - LAYOUT.frame);
+    const logH = Math.max(narrow ? 84 : 120, H - y - frame);
     this.column.add(nine(this, UI.console, x0, y, cw, logH));
-    this.column.add(label(this, x0 + pad, y + 11, "ON THE GROUND", { size: 8, font: f.pixel, color: T.ley, crisp: true }));
+    this.column.add(label(this, x0 + pad, y + 10, "ON THE GROUND", { size: TYPE.kicker, font: f.pixel, color: T.ley, crisp: true }));
     if (this.log.length === 0) {
-      this.column.add(label(this, x0 + pad, y + 32, "Nothing yet. Click the map and the surveyor walks there.", { size: 10.5, color: T.inkDim, font: f.serif, wrap: cw - pad * 2 }));
+      this.column.add(label(this, x0 + pad, y + 30, narrow ? "Tap the map and the surveyor walks there." : "Nothing yet. Click the map and the surveyor walks there.", { size: TYPE.log, color: T.inkDim, font: f.serif, wrap: cw - pad * 2 }));
     }
-    let ly = y + 32;
+    let ly = y + 30;
     for (const [i, line] of this.log.entries()) {
-      if (ly > y + logH - 24) break;
-      const t = label(this, x0 + pad, ly, line, { size: 10.5, color: i === 0 ? T.ink : T.inkDim, font: f.serif, wrap: cw - pad * 2 });
+      if (ly > y + logH - 22) break;
+      const t = label(this, x0 + pad, ly, line, { size: TYPE.log, color: i === 0 ? T.ink : T.inkDim, font: f.serif, wrap: cw - pad * 2 });
+      if (ly + t.height > y + logH - 6) {
+        t.destroy();
+        break;
+      }
       this.column.add(t);
-      ly += t.height + 8;
+      ly += t.height + 6;
     }
   }
 
@@ -424,19 +462,19 @@ export class UIScene extends Phaser.Scene {
   /**
    * A pop-up on the parchment stock, sized to its text, scaled in from
    * nothing with a Back ease so it lands with a snap. `x, y` is where it
-   * points at; the box is kept inside the map viewport.
+   * points at, in CSS pixels; the box is kept inside the map viewport.
    */
   private showPopup(title: string, body: string, x: number, y: number, tone: number, pinMs: number) {
-    const v = mapViewport(this.scale.width, this.scale.height);
+    const { map: v } = this.lay;
     const f = this.opts.fonts;
-    const w = 268;
+    const w = Math.min(280, v.w - 24);
     const pad = 14;
     this.popupTween?.destroy();
     this.popupTimer?.remove(false);
     this.popup.removeAll(true);
 
-    const t = label(this, 0, 0, title, { size: 8, font: f.pixel, color: tone, wrap: w - pad * 2, crisp: true });
-    const b = label(this, 0, 0, body, { size: 11, font: f.serif, color: T.vellumInkDim, wrap: w - pad * 2 });
+    const t = label(this, 0, 0, title, { size: TYPE.kicker, font: f.pixel, color: tone, wrap: w - pad * 2, crisp: true });
+    const b = label(this, 0, 0, body, { size: TYPE.body, font: f.serif, color: T.vellumInkDim, wrap: w - pad * 2 });
     const h = pad + t.height + 8 + b.height + pad - 2;
     // Children sit around the container's origin, so the scale tween grows the box from its centre.
     const panel = nine(this, UI.panel, -w / 2, -h / 2, w, h);
@@ -473,17 +511,17 @@ export class UIScene extends Phaser.Scene {
   }
 
   private showWelcome(w: WelcomeEvent) {
-    const v = mapViewport(this.scale.width, this.scale.height);
+    const { map: v } = this.lay;
     const threshold = w.liquidationPrice !== null ? ` It liquidates ${w.exposure === "SHORT" ? "above" : "below"} ${usd(w.liquidationPrice)}.` : "";
     const body = `${w.greeting} It rules ${(w.share * 100).toFixed(0)}% of the ground.${threshold}`;
-    this.showPopup(`WELCOME TO THE SEAT OF ${w.deploymentId.toUpperCase()}`, body, v.x + v.w / 2 - 134 - 18, v.y + 96 - 18, T.brass, 7000);
+    this.showPopup(`WELCOME TO THE SEAT OF ${w.deploymentId.toUpperCase()}`, body, v.x + v.w / 2 - 140 - 18, v.y + 96 - 18, T.brass, 7000);
     this.note(`Welcomed at the seat of ${w.deploymentId}.`);
   }
 
   /* ── hover box ────────────────────────────────────────────────────── */
 
   private showIdle() {
-    this.showHover("THE GROUND", "Move over the map to read it. Click, and the surveyor walks there.");
+    this.showHover("THE GROUND", this.lay.narrow ? "Tap the map to read it; the surveyor walks there." : "Move over the map to read it. Click, and the surveyor walks there.");
   }
 
   private showZone(r: ZoneReading) {

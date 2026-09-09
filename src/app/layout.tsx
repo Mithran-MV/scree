@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cinzel, EB_Garamond, IBM_Plex_Mono, Press_Start_2P } from "next/font/google";
 import "./globals.css";
 
@@ -16,6 +16,16 @@ const pixel = Press_Start_2P({ subsets: ["latin"], weight: "400", variable: "--f
 export const metadata: Metadata = {
   title: "Scree — Liquidation Topography",
   description: "A living survey of how you get liquidated. Sculpt your defence.",
+};
+
+/** A phone shows the survey edge to edge, at its own density, and does not scale the page. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#141c22",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

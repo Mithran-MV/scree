@@ -333,6 +333,11 @@ registry row.
 Query parameters: `?sources=id,id` restricts the registry, so the difference
 one schema makes is reproducible by anyone.
 
+The canvas is drawn at the screen's own pixel density and the pixel art is
+scaled up in-game, so type stays sharp on any display. On a phone the
+instrument column moves under the map, a tap reads the ground and walks the
+surveyor there, and two fingers zoom.
+
 A live survey runs at [scree.hacklabs.in](https://scree.hacklabs.in). Two
 public addresses that borrow on more than one deployment, if you want ground
 with borders before connecting your own wallet:

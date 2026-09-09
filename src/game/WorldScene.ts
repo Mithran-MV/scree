@@ -5,6 +5,7 @@ import { CLUTTER, FX, MONSTERS, SHEET, ZONE_COLOURS } from "./figures";
 import { hash } from "./clutter";
 import { blueprintFor, greetingFor } from "./holdfasts";
 import { LAYOUT, mapViewport } from "./layout";
+import { logical } from "./screen";
 import { EV, type CitadelHover, type GuardianEvent, type MonsterEvent, type ScoutsEvent, type WelcomeEvent, type ZoneReading } from "./events";
 import { Ground } from "./ground";
 import { loadWorldSheets } from "./assets";
@@ -190,9 +191,9 @@ export class WorldScene extends Phaser.Scene {
     return `${tx},${ty}`;
   }
 
-  /** One world unit per screen pixel at the current zoom: line widths are drawn in screen terms. */
+  /** World units per CSS pixel at the current zoom: line widths are drawn in screen terms. */
   private screenPx(): number {
-    return 1 / (this.cameras.main?.zoom || 1);
+    return logical(this).D / (this.cameras.main?.zoom || 1);
   }
 
   /** The liquidation line as light along the shore, and the faults as ley that breathes under the crags. */
@@ -400,7 +401,9 @@ export class WorldScene extends Phaser.Scene {
   /** Tween the camera in on the surveyor, then redraw what is drawn in screen pixels. */
   private lookCloser(zoom: number) {
     const cam = this.cameras.main;
-    cam.zoomTo(Math.max(zoom, this.fitZoom()), 1000, "Sine.easeInOut", true, (_c: Phaser.Cameras.Scene2D.Camera, progress: number) => {
+    // Points of interest are asked for in CSS pixels per world unit; the camera works in device pixels.
+    const target = zoom * logical(this).D;
+    cam.zoomTo(Math.max(target, this.fitZoom()), 1000, "Sine.easeInOut", true, (_c: Phaser.Cameras.Scene2D.Camera, progress: number) => {
       cam.setFollowOffset(0, this.followOffset());
       if (progress === 1) this.drawLines();
     });
@@ -477,28 +480,44 @@ export class WorldScene extends Phaser.Scene {
 
   private monsterEvent(m: SeaMonster, entered: boolean, pointer: Phaser.Input.Pointer): MonsterEvent {
     const { fx, fy } = this.worldToFractions(m.x, m.y);
-    return { key: m.spec.key, name: m.spec.name, warning: m.spec.warning, entered, x: pointer.x, y: pointer.y, reading: this.opts.readAt(fx, fy) };
+    const { D } = logical(this);
+    return { key: m.spec.key, name: m.spec.name, warning: m.spec.warning, entered, x: pointer.x / D, y: pointer.y / D, reading: this.opts.readAt(fx, fy) };
   }
 
   /* ── camera and input ─────────────────────────────────────────────── */
 
+  /** The map viewport in device pixels: the camera, unlike the interface, works in those. */
+  private deviceViewport(): { x: number; y: number; w: number; h: number; D: number } {
+    const { W, H, D } = logical(this);
+    const v = mapViewport(W, H);
+    return { x: v.x * D, y: v.y * D, w: v.w * D, h: v.h * D, D };
+  }
+
+  /** The zoom that shows the whole survey, in device pixels per world unit. */
   private fitZoom(): number {
-    const v = mapViewport(this.scale.width, this.scale.height);
-    return Phaser.Math.Clamp(Math.min(v.w / this.worldW, v.h / (this.worldH + AXIS_H)), 1 / SCALE, 1);
+    const v = this.deviceViewport();
+    return Phaser.Math.Clamp(Math.min(v.w / this.worldW, v.h / (this.worldH + AXIS_H)), v.D / SCALE, v.D);
+  }
+
+  /** The closest the wheel or a pinch may bring the ground. */
+  private maxZoom(): number {
+    return 2.5 * logical(this).D;
   }
 
   /** Hold the surveyor below the viewport's centre, with the paper margin under him, so his ground is never at the edge. */
   private followOffset(): number {
-    const v = mapViewport(this.scale.width, this.scale.height);
+    const v = this.deviceViewport();
     return (v.h / this.cameras.main.zoom) * 0.15;
   }
 
   private wireCamera() {
     const cam = this.cameras.main;
     const fit = () => {
-      const v = mapViewport(this.scale.width, this.scale.height);
+      const v = this.deviceViewport();
       cam.setViewport(v.x, v.y, v.w, v.h);
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom, this.fitZoom(), this.maxZoom()));
       cam.setFollowOffset(0, this.followOffset());
+      this.drawLines();
     };
     cam.setBounds(0, 0, this.worldW, this.worldH + AXIS_H);
     cam.setZoom(this.fitZoom());
@@ -509,8 +528,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private inViewport(pointer: Phaser.Input.Pointer): boolean {
-    const v = mapViewport(this.scale.width, this.scale.height);
+    const v = this.deviceViewport();
     return pointer.x >= v.x && pointer.x < v.x + v.w && pointer.y >= v.y && pointer.y < v.y + v.h;
+  }
+
+  /** Zoom within the survey's limits, keeping the surveyor's ground under him and the lines the right weight. */
+  private setZoom(zoom: number) {
+    const cam = this.cameras.main;
+    cam.setZoom(Phaser.Math.Clamp(zoom, this.fitZoom(), this.maxZoom()));
+    cam.setFollowOffset(0, this.followOffset());
+    this.drawLines();
   }
 
   private wireInput() {
@@ -535,21 +562,42 @@ export class WorldScene extends Phaser.Scene {
       const now = this.time.now;
       if (now - lastDown < 320) {
         lastDown = 0;
-        this.lookCloser(this.fitZoom());
+        this.lookCloser(this.fitZoom() / logical(this).D);
         return;
       }
       lastDown = now;
+      if (this.input.pointer2?.isDown) return; // a second finger is a pinch, not a walk
       const p = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       const { fx, fy } = this.worldToFractions(p.x, p.y);
+      // A touch has no hover: the tap reads the ground it lands on before the walk begins.
+      if (pointer.wasTouch) this.events.emit(EV.zoneHover, this.opts.readAt(fx, fy));
       this.walkTo(fx, fy);
     });
 
     this.input.on("wheel", (pointer: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
       if (!this.inViewport(pointer)) return;
-      const cam = this.cameras.main;
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.12), this.fitZoom(), 2.5));
-      cam.setFollowOffset(0, this.followOffset());
-      this.drawLines();
+      this.setZoom(this.cameras.main.zoom * (dy > 0 ? 0.9 : 1.12));
+    });
+
+    // Two fingers: the distance between them scales the zoom from where it was when they landed.
+    this.input.addPointer(1);
+    let pinch: { distance: number; zoom: number } | null = null;
+    this.input.on("pointermove", () => {
+      const a = this.input.pointer1;
+      const b = this.input.pointer2;
+      if (!a?.isDown || !b?.isDown) {
+        pinch = null;
+        return;
+      }
+      const distance = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+      if (!pinch) {
+        pinch = { distance, zoom: this.cameras.main.zoom };
+        return;
+      }
+      this.setZoom((pinch.zoom * distance) / Math.max(1, pinch.distance));
+    });
+    this.input.on("pointerup", () => {
+      pinch = null;
     });
 
     const canvas = this.game.canvas;

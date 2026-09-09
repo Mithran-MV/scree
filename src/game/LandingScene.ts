@@ -3,6 +3,8 @@ import { Ground } from "./ground";
 import { loadUiStock, loadWorldSheets } from "./assets";
 import { UI, label, nine } from "./chrome";
 import { WebFontFile } from "./fonts";
+import { doorLayout } from "./layout";
+import { logical, pinToScreen } from "./screen";
 import { blip } from "./sfx";
 import { T } from "./theme";
 import type { TerrainGrid } from "./terrain";
@@ -18,6 +20,12 @@ export interface LandingData {
   onBegin: (address: string | null) => void;
   /** Ask the browser's wallet for an address: null when there is no provider, a rejection when it declines. */
   connect: () => Promise<string | null>;
+  /**
+   * The one real control is the page's: an HTML input laid over the console
+   * at the spot `doorLayout` names, so paste, autofill, screen readers and
+   * phone keyboards all work. The door reads and writes it through this.
+   */
+  field: { get: () => string; set: (value: string) => void; disable: () => void };
 }
 
 const DEPTH = { veil: 5, type: 10, console: 12 } as const;
@@ -28,9 +36,10 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
  * The door to the survey.
  *
  * Behind the title, the same ground the survey draws, panned slowly by its
- * own camera under a dark veil. In front, a stone console with one real
- * text input and two brass buttons. Begin, and the door fades into the
- * world, carrying the address to the page and the world's data to the scene.
+ * own camera under a dark veil. In front, a stone console with the page's
+ * text input set into it and two brass buttons. Begin, and the door fades
+ * into the world, carrying the address to the page and the world's data to
+ * the scene.
  */
 export class LandingScene extends Phaser.Scene {
   private opts!: LandingData;
@@ -39,8 +48,6 @@ export class LandingScene extends Phaser.Scene {
   private lens!: Phaser.Cameras.Scene2D.Camera;
   private scenery: Phaser.GameObjects.GameObject[] = [];
   private hud!: Phaser.GameObjects.Container;
-  private dom: Phaser.GameObjects.DOMElement | undefined;
-  private field: HTMLInputElement | null = null;
   private status: Phaser.GameObjects.Text | undefined;
   private leaving = false;
 
@@ -83,13 +90,12 @@ export class LandingScene extends Phaser.Scene {
 
     this.cameras.main.fadeIn(600, 8, 24, 32);
     this.lens.fadeIn(600, 8, 24, 32);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.dom?.destroy());
   }
 
   /** A slow, endless drift across the ground: the camera's scroll is tweened and reversed, never cut. */
   private cinematicPan() {
     const cam = this.cameras.main;
-    cam.setZoom(0.5);
+    cam.setZoom(0.5 * logical(this).D);
     const viewW = cam.width / cam.zoom;
     const viewH = cam.height / cam.zoom;
     const maxX = Math.max(0, this.ground.worldW - viewW);
@@ -104,51 +110,36 @@ export class LandingScene extends Phaser.Scene {
   /* ── the interface ───────────────────────────────────────────────── */
 
   private layout() {
-    const W = this.scale.width;
-    const H = this.scale.height;
+    const { W, H, D } = logical(this);
+    pinToScreen(this.lens, D);
+    const d = doorLayout(W, H);
     const f = this.opts.fonts;
     const cx = Math.round(W / 2);
     this.hud.removeAll(true);
-    this.dom?.destroy();
     this.status = undefined;
 
     // The veil: the ground shows through, the type does not compete with it.
     this.hud.add(this.add.rectangle(0, 0, W, H, 0x081820, 0.58).setOrigin(0, 0));
 
     // The title.
-    const titleY = Math.round(H * 0.16);
-    this.hud.add(label(this, cx, titleY - 28, "A SURVEY MAP OF HOW YOU GET LIQUIDATED", { size: 8, font: f.pixel, color: T.ley, align: "center", crisp: true, stroke: { color: T.shellEdge, thickness: 3 } }));
-    this.hud.add(label(this, cx, titleY, "SCREE", { size: 64, font: f.pixel, color: 0xe0b25a, align: "center", crisp: true, stroke: { color: T.shellEdge, thickness: 10 }, shadow: true }));
-    this.hud.add(label(this, cx, titleY + 98, "Survey Your Liquidation Topography.", { size: 16, font: f.pixel, color: T.vellum, align: "center", crisp: true, stroke: { color: T.shellEdge, thickness: 4 } }));
+    const { y: titleY, size } = d.title;
+    const kicker = W < 560 ? "HOW YOU GET LIQUIDATED, AS A MAP" : "A SURVEY MAP OF HOW YOU GET LIQUIDATED";
+    this.hud.add(label(this, cx, titleY - 24, kicker, { size: 8, font: f.pixel, color: T.ley, align: "center", crisp: true, stroke: { color: T.shellEdge, thickness: 3 }, wrap: W - 24 }));
+    const title = label(this, cx, titleY, "SCREE", { size, font: f.pixel, color: 0xe0b25a, align: "center", crisp: true, stroke: { color: T.shellEdge, thickness: Math.round(size / 6) }, shadow: true });
+    this.hud.add(title);
+    // The pixel face sets its line tall and the stroke adds to it, so the subtitle hangs from the title's measured height.
+    this.hud.add(label(this, cx, titleY + Math.round(title.height * 0.92), "Survey Your Liquidation Topography.", { size: W < 560 ? 8 : 16, font: f.pixel, color: T.vellum, align: "center", crisp: true, stroke: { color: T.shellEdge, thickness: 4 }, wrap: W - 24 }));
 
-    // The console.
-    const cw = Math.min(480, W - 40);
-    const ch = 236;
-    const cy = Math.round(Math.min(H - ch - 24, H * 0.44));
-    const left = cx - cw / 2;
-    this.hud.add(nine(this, UI.frame, left, cy, cw, ch, 20));
-    this.hud.add(label(this, cx, cy + 30, "PASTE AN ADDRESS, OR CONNECT A WALLET", { size: 8, font: f.pixel, color: T.vellum, align: "center", crisp: true }));
-
-    // The one real control: an HTML input, so paste, autofill and screen
-    // readers keep working. Phaser places it over the canvas.
-    this.dom = this.add
-      .dom(cx, cy + 82)
-      .createFromHTML(
-        `<input class="scree-terminal" type="text" placeholder="0x… paste an address" spellcheck="false" autocomplete="off" style="width:${cw - 72}px" />`,
-      );
-    this.dom.setDepth(DEPTH.console + 1);
-    this.cameras.main.ignore(this.dom);
-    this.field = this.dom.node.querySelector("input");
-    this.field?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") this.beginFromField();
-    });
+    // The console. The page lays its input on it at d.input.
+    const c = d.console;
+    this.hud.add(nine(this, UI.frame, c.x, c.y, c.w, c.h, 20));
+    this.hud.add(label(this, cx, c.y + 30, d.stacked ? "PASTE AN ADDRESS OR CONNECT" : "PASTE AN ADDRESS, OR CONNECT A WALLET", { size: 8, font: f.pixel, color: T.vellum, align: "center", crisp: true }));
 
     // Two brass buttons.
-    const by = cy + 146;
-    this.hud.add(this.bigButton(cx - 96, by, "BEGIN SURVEY", () => this.beginFromField()));
-    this.hud.add(this.bigButton(cx + 96, by, "CONNECT WALLET", () => void this.connectWallet()));
+    this.hud.add(this.bigButton(d.buttons[0].x, d.buttons[0].y, "BEGIN SURVEY", () => this.beginFromField()));
+    this.hud.add(this.bigButton(d.buttons[1].x, d.buttons[1].y, "CONNECT WALLET", () => void this.connectWallet()));
 
-    this.status = label(this, cx, cy + 192, "The reference book opens first. Your own replaces it when it arrives.", { size: 10, font: f.mono, color: T.inkDim, align: "center", wrap: cw - 48 });
+    this.status = label(this, cx, d.statusY, "The reference book opens first. Your own replaces it when it arrives.", { size: 11, font: f.mono, color: T.inkDim, align: "center", wrap: c.w - 40 });
     this.hud.add(this.status);
   }
 
@@ -189,8 +180,9 @@ export class LandingScene extends Phaser.Scene {
 
   /* ── leaving ─────────────────────────────────────────────────────── */
 
-  private beginFromField() {
-    const raw = this.field?.value.trim() ?? "";
+  /** Read the page's field and go: the page calls this on Enter, the button on press. */
+  beginFromField() {
+    const raw = this.opts.field.get().trim();
     if (raw && !ADDRESS.test(raw)) {
       this.setStatus("That is not an address. Paste 0x followed by forty hex characters, or leave it empty for the reference book.", true);
       return;
@@ -207,7 +199,7 @@ export class LandingScene extends Phaser.Scene {
         this.setStatus("No wallet found in this browser. Paste an address instead.", true);
         return;
       }
-      if (this.field) this.field.value = account;
+      this.opts.field.set(account);
       this.begin(account);
     } catch (err) {
       this.setStatus(err instanceof Error ? err.message : "The wallet declined the request.", true);
@@ -220,7 +212,7 @@ export class LandingScene extends Phaser.Scene {
     this.leaving = true;
     blip("begin");
     this.setStatus(address ? `Surveying ${short(address)}…` : "Opening the reference book…", false);
-    if (this.field) this.field.disabled = true;
+    this.opts.field.disable();
     this.cameras.main.fadeOut(500, 0, 0, 0);
     this.lens.fadeOut(500, 0, 0, 0);
     this.lens.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {

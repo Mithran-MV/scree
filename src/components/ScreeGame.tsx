@@ -13,6 +13,9 @@ import { bandOf, buildTerrainGrid, mapFxOf, surveyWindow, warpFx } from "@/game/
 import type { ZoneReading } from "@/game/events";
 import type { PriceTick, ScoutPath, WorldData, WorldScene } from "@/game/WorldScene";
 import type { FeedRow, PushedState, TerraceChart, UIData, UIScene } from "@/game/UIScene";
+import type { LandingScene } from "@/game/LandingScene";
+import { doorLayout, layoutFor } from "@/game/layout";
+import { DPR_KEY, dprOf } from "@/game/screen";
 
 export interface Sources {
   /** Deployments the survey asked, in registry order. Empty for the reference book. */
@@ -73,6 +76,13 @@ export function ScreeGame(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<WorldScene | null>(null);
   const uiRef = useRef<UIScene | null>(null);
+  const landingRef = useRef<LandingScene | null>(null);
+  const gameRef = useRef<Phaser.Game | null>(null);
+  const doorFieldRef = useRef<HTMLInputElement>(null);
+  /** The host observer's apply, so the game can ask for a fresh measurement once it has booted. */
+  const applySizeRef = useRef<() => void>(() => {});
+  /** The host's size in CSS pixels, so the page can lay its inputs where the scenes draw their slots. */
+  const [hostSize, setHostSize] = useState({ w: 0, h: 0 });
   /** The door is up until the survey begins; the address slot belongs to the survey. */
   const [phase, setPhase] = useState<"door" | "survey">("door");
 
@@ -321,16 +331,29 @@ export function ScreeGame(props: Props) {
       const landing = new LandingScene();
       const world = new WorldScene();
       const uiScene = new UIScene();
+      // The canvas holds device pixels and is shown at CSS size; the scenes
+      // pin their screen cameras to the density, so sprites scale up in-game
+      // and type lands one glyph pixel on one screen pixel.
+      const D = dprOf();
+      // The host can measure empty while styles are still arriving; the
+      // window is the next best guess, and the observer corrects it after boot.
+      const w = host.clientWidth >= 8 ? host.clientWidth : window.innerWidth;
+      const h = host.clientHeight >= 8 ? host.clientHeight : window.innerHeight;
       game = new PhaserLib.Game({
         type: PhaserLib.AUTO,
         parent: host,
         backgroundColor: "#141c22",
         pixelArt: true,
         physics: { default: "arcade" },
-        dom: { createContainer: true },
-        scale: { mode: PhaserLib.Scale.RESIZE, width: "100%", height: "100%" },
+        scale: { mode: PhaserLib.Scale.NONE, width: Math.round(w * D), height: Math.round(h * D), zoom: 1 / D },
+        input: { activePointers: 3 },
         banner: false,
       });
+      game.registry.set(DPR_KEY, D);
+      gameRef.current = game;
+      setHostSize({ w, h });
+      // Whatever the host measured at creation, the observer's measurement wins once the game is up.
+      game.events.once("ready", () => applySizeRef.current());
 
       // The door starts; the world and its interface are registered and wait.
       // Scenes are added here rather than listed in the config, which would
@@ -346,10 +369,20 @@ export function ScreeGame(props: Props) {
           propsRef.current.onBegin(address);
         },
         connect: () => propsRef.current.connectWallet(),
+        field: {
+          get: () => doorFieldRef.current?.value ?? "",
+          set: (value: string) => {
+            if (doorFieldRef.current) doorFieldRef.current.value = value;
+          },
+          disable: () => {
+            if (doorFieldRef.current) doorFieldRef.current.disabled = true;
+          },
+        },
       });
 
       worldRef.current = world;
       uiRef.current = uiScene;
+      landingRef.current = landing;
       // Expose the game on its host element so tooling and tests can drive
       // the loop directly, without reaching into React.
       (host as unknown as { __game?: Phaser.Game }).__game = game;
@@ -360,11 +393,52 @@ export function ScreeGame(props: Props) {
       worldRef.current = null;
       uiRef.current = null;
       uiRef2.current = null;
+      landingRef.current = null;
+      gameRef.current = null;
       game?.destroy(true);
     };
     // The game is made once; everything that changes reaches it through refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The host's size drives the canvas and the page's inputs alike. A move
+  // between screens changes the density too, so it is re-read on every resize.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const apply = () => {
+      const w = host.clientWidth;
+      const h = host.clientHeight;
+      // A host with no size yet (styles still arriving) is not a layout.
+      if (w < 8 || h < 8) return;
+      setHostSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+      const game = gameRef.current;
+      if (!game) return;
+      if (!game.isBooted || !game.scale) {
+        game.events.once("ready", apply);
+        return;
+      }
+      const D = dprOf();
+      if (game.registry.get(DPR_KEY) !== D) {
+        game.registry.set(DPR_KEY, D);
+        game.scale.setZoom(1 / D);
+      }
+      const gw = Math.round(w * D);
+      const gh = Math.round(h * D);
+      if (game.scale.width !== gw || game.scale.height !== gh) game.scale.resize(gw, gh);
+    };
+    applySizeRef.current = apply;
+    const observer = new ResizeObserver(apply);
+    observer.observe(host);
+    window.addEventListener("resize", apply);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, []);
+
+  const slot = hostSize.w > 0 ? layoutFor(hostSize.w, hostSize.h).slot : null;
+  const door = hostSize.w > 0 ? doorLayout(hostSize.w, hostSize.h).input : null;
 
   return (
     <div className="scree">
@@ -372,15 +446,32 @@ export function ScreeGame(props: Props) {
       {/* The one control that stays in the DOM: a real text input, so paste,
           autofill and screen readers keep working. It sits on the slot the
           interface draws for it. */}
-      {phase === "survey" && (
-      <input
-        className="address-slot"
-        value={props.address}
-        onChange={(e) => props.onAddress(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && !props.busy && props.onSurvey()}
-        placeholder={props.busy ? "reading…" : "0x… paste an address"}
-        spellCheck={false}
-      />
+      {phase === "survey" && slot && (
+        <input
+          className="address-slot"
+          style={{ left: slot.x + 4, top: slot.y + 4, width: slot.w - 8, height: slot.h - 8 }}
+          value={props.address}
+          onChange={(e) => props.onAddress(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !props.busy && props.onSurvey()}
+          placeholder={props.busy ? "reading…" : "0x… paste an address"}
+          spellCheck={false}
+          autoComplete="off"
+          inputMode="text"
+        />
+      )}
+      {/* The door's field: the same kind of real input, set into the stone
+          console where the door's layout says the slot is. */}
+      {phase === "door" && door && (
+        <input
+          ref={doorFieldRef}
+          className="scree-terminal"
+          style={{ left: door.x, top: door.y, width: door.w, height: door.h }}
+          onKeyDown={(e) => e.key === "Enter" && landingRef.current?.beginFromField()}
+          placeholder="0x… paste an address"
+          spellCheck={false}
+          autoComplete="off"
+          inputMode="text"
+        />
       )}
     </div>
   );

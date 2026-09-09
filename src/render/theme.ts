@@ -123,10 +123,10 @@ export interface Specimen {
  */
 export const TYPE: Record<string, Specimen> = {
   contourFigure: { role: "measurement", size: 9, family: "mono", alpha: 1, color: SHEET.ink },
-  passReadout: { role: "measurement", size: 10, family: "mono", alpha: 1, color: SHEET.accent },
-  foldCrossing: { role: "measurement", size: 9, family: "mono", alpha: 1, color: SHEET.ink },
-  staffReading: { role: "measurement", size: 9, family: "mono", alpha: 1, color: SHEET.ink },
-  marginFinding: { role: "measurement", size: 9.5, family: "mono", alpha: 1, color: SHEET.ink },
+  passReadout: { role: "measurement", size: 13, family: "mono", alpha: 1, color: SHEET.accent },
+  foldCrossing: { role: "measurement", size: 11, family: "mono", alpha: 1, color: SHEET.ink },
+  staffReading: { role: "measurement", size: 11, family: "mono", alpha: 1, color: SHEET.ink },
+  marginFinding: { role: "measurement", size: 11.5, family: "mono", alpha: 1, color: SHEET.ink },
   territoryName: { role: "name", size: 11, family: "serif", alpha: 0.62, color: SHEET.ink, tracking: 3.2 },
   cartoucheTitle: { role: "name", size: 15, family: "serif", alpha: 1, color: SHEET.ink },
   seaLegend: { role: "name", size: 10, family: "serif", alpha: 0.7, color: SHEET.ink, tracking: 2.4 },

@@ -100,7 +100,7 @@ a { color: var(--accent); }
 
 .axis {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
   display: flex;
   justify-content: space-between;
@@ -215,6 +215,7 @@ a { color: var(--accent); }
 html, body {
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--void);
   color: var(--ink);
   font-family: var(--serif);
@@ -228,19 +229,19 @@ html, body {
   display: block;
   image-rendering: crisp-edges;
   image-rendering: pixelated;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* The address field: a real input laid over the slot the dashboard draws. */
+/* The address field: a real input laid over the slot the interface draws.
+   Its position comes from the same layout the interface uses. */
 .address-slot {
   position: absolute;
-  right: 90px;
-  top: 64px;
-  width: 190px;
-  height: 22px;
   z-index: 3;
-  padding: 0 6px;
+  box-sizing: border-box;
+  padding: 0 8px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink);
   background: transparent;
   border: 0;
@@ -254,14 +255,17 @@ html, body {
   z-index: 10;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 12px;
   background: rgba(4, 10, 14, 0.93);
   overflow: auto;
 }
-.plate-overlay .plate { background: var(--plate); max-width: 560px; width: 100%; }
+.plate-overlay .plate { background: var(--plate); max-width: min(560px, 100%); width: 100%; }
 
-/* The door's address field: a recessed terminal set into the stone console. */
+/* The door's address field: a recessed terminal set into the stone console,
+   laid over the canvas by the page at the spot the door's layout names. */
 .scree-terminal {
+  position: absolute;
+  z-index: 3;
   box-sizing: border-box;
   height: 36px;
   padding: 0 12px;
