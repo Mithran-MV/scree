@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type Phaser from "phaser";
 import type { Basket } from "@/core/types";
 import { bracket } from "@/core/bracket";
@@ -12,7 +12,7 @@ import { walkPaths } from "@/sim/paths";
 import { bandOf, buildTerrainGrid, mapFxOf, surveyWindow, warpFx } from "@/game/terrain";
 import type { ZoneReading } from "@/game/events";
 import type { PriceTick, ScoutPath, WorldData, WorldScene } from "@/game/WorldScene";
-import type { FeedRow, PushedState, TerraceChart, UIScene } from "@/game/UIScene";
+import type { FeedRow, PushedState, TerraceChart, UIData, UIScene } from "@/game/UIScene";
 
 interface Props {
   baskets: Basket[];
@@ -24,6 +24,10 @@ interface Props {
   onAddress: (v: string) => void;
   onSurvey: () => void;
   onConnect: () => void;
+  /** Ask the browser's wallet for an address: null without a provider, a rejection when declined. */
+  connectWallet: () => Promise<string | null>;
+  /** The door hands over an address, or none for the reference book. */
+  onBegin: (address: string | null) => void;
   wallet: string | null;
   onReference: () => void;
   onPlate: () => void;
@@ -59,6 +63,8 @@ export function ScreeGame(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<WorldScene | null>(null);
   const uiRef = useRef<UIScene | null>(null);
+  /** The door is up until the survey begins; the address slot belongs to the survey. */
+  const [phase, setPhase] = useState<"door" | "survey">("door");
 
   /* ── the book, measured ───────────────────────────────────────── */
 
@@ -225,7 +231,28 @@ export function ScreeGame(props: Props) {
     sendScoutsRef.current = sendScouts;
   }, [sendScouts]);
 
-  /* ── mount ────────────────────────────────────────────────────── */
+  /* ── the world's data: rebuilt when the book changes, restarting the world ── */
+
+  const uiRef2 = useRef<UIData | null>(null);
+  const worldDataRef = useRef<WorldData | null>(null);
+  useEffect(() => {
+    const ui = uiRef2.current;
+    if (!ui) return;
+    const data: WorldData = { grid, readAt, axis: { ticks }, ui };
+    const first = worldDataRef.current === null;
+    worldDataRef.current = data;
+    // A new book while the survey is open: the world starts again on it.
+    if (!first && worldRef.current?.scene.isActive()) worldRef.current.scene.restart(data);
+  }, [grid, readAt, ticks]);
+
+  /* ── mount, once ──────────────────────────────────────────────── */
+
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+  const readAtRef = useRef(readAt);
+  readAtRef.current = readAt;
+  const ticksRef = useRef(ticks);
+  ticksRef.current = ticks;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -235,7 +262,11 @@ export function ScreeGame(props: Props) {
 
     (async () => {
       const PhaserLib = (await import("phaser")).default;
-      const [{ WorldScene }, { UIScene }] = await Promise.all([import("@/game/WorldScene"), import("@/game/UIScene")]);
+      const [{ LandingScene }, { WorldScene }, { UIScene }] = await Promise.all([
+        import("@/game/LandingScene"),
+        import("@/game/WorldScene"),
+        import("@/game/UIScene"),
+      ]);
       if (cancelled) return;
 
       // Phaser draws text with canvas fonts, so the faces the page loaded are
@@ -249,44 +280,52 @@ export function ScreeGame(props: Props) {
         pixel: cssVar("--font-pixel", "monospace"),
       };
 
+      const ui: UIData = {
+        fonts,
+        getState: () => pushedRef.current,
+        actions: {
+          connect: () => propsRef.current.onConnect(),
+          survey: () => propsRef.current.onSurvey(),
+          reference: () => propsRef.current.onReference(),
+          scouts: () => sendScoutsRef.current(),
+          plate: () => propsRef.current.onPlate(),
+        },
+      };
+      uiRef2.current = ui;
+      worldDataRef.current = { grid: gridRef.current, readAt: readAtRef.current, axis: { ticks: ticksRef.current }, ui };
+
+      const landing = new LandingScene();
       const world = new WorldScene();
-      const ui = new UIScene();
+      const uiScene = new UIScene();
       game = new PhaserLib.Game({
         type: PhaserLib.AUTO,
         parent: host,
         backgroundColor: "#141c22",
         pixelArt: true,
         physics: { default: "arcade" },
+        dom: { createContainer: true },
         scale: { mode: PhaserLib.Scale.RESIZE, width: "100%", height: "100%" },
         banner: false,
       });
 
-      const data: WorldData = {
-        grid,
-        readAt,
-        axis: { ticks },
-        ui: {
-          fonts,
-          getState: () => pushedRef.current,
-          actions: {
-            connect: () => propsRef.current.onConnect(),
-            survey: () => propsRef.current.onSurvey(),
-            reference: () => propsRef.current.onReference(),
-            scouts: () => sendScoutsRef.current(),
-            plate: () => propsRef.current.onPlate(),
-          },
+      // The door starts; the world and its interface are registered and wait.
+      // Scenes are added here rather than listed in the config, which would
+      // auto-start them empty and restart them mid-load.
+      game.scene.add("WorldScene", world, false);
+      game.scene.add("UIScene", uiScene, false);
+      game.scene.add("LandingScene", landing, true, {
+        grid: gridRef.current,
+        fonts,
+        worldData: () => worldDataRef.current!,
+        onBegin: (address: string | null) => {
+          setPhase("survey");
+          propsRef.current.onBegin(address);
         },
-      };
-
-      // The interface is registered but not started: the world launches it
-      // once the ground exists. The world is added and started once, with its
-      // data, rather than listed in the config, which would auto-start it
-      // empty and restart it mid-load.
-      game.scene.add("WorldScene", world, true, data);
-      game.scene.add("UIScene", ui, false);
+        connect: () => propsRef.current.connectWallet(),
+      });
 
       worldRef.current = world;
-      uiRef.current = ui;
+      uiRef.current = uiScene;
       // Expose the game on its host element so tooling and tests can drive
       // the loop directly, without reaching into React.
       (host as unknown as { __game?: Phaser.Game }).__game = game;
@@ -296,9 +335,12 @@ export function ScreeGame(props: Props) {
       cancelled = true;
       worldRef.current = null;
       uiRef.current = null;
+      uiRef2.current = null;
       game?.destroy(true);
     };
-  }, [grid, readAt, ticks]);
+    // The game is made once; everything that changes reaches it through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="scree">
@@ -306,6 +348,7 @@ export function ScreeGame(props: Props) {
       {/* The one control that stays in the DOM: a real text input, so paste,
           autofill and screen readers keep working. It sits on the slot the
           interface draws for it. */}
+      {phase === "survey" && (
       <input
         className="address-slot"
         value={props.address}
@@ -314,6 +357,7 @@ export function ScreeGame(props: Props) {
         placeholder={props.busy ? "reading…" : "0x… paste an address"}
         spellCheck={false}
       />
+      )}
     </div>
   );
 }

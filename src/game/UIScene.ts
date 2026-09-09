@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { UI, button, label, nine } from "./chrome";
+import { loadUiStock } from "./assets";
 import { WebFontFile } from "./fonts";
 import { LAYOUT, mapViewport } from "./layout";
 import {
@@ -114,15 +115,14 @@ export class UIScene extends Phaser.Scene {
 
   /** The interface's stock, and the pixel face the page declared: the loader waits for it. */
   preload() {
-    this.load.image(UI.panel, "/assets/scree/ui-panel.png");
-    this.load.image(UI.console, "/assets/scree/ui-console.png");
-    this.load.image(UI.button, "/assets/scree/ui-button.png");
-    this.load.image(UI.topbar, "/assets/scree/ui-topbar.png");
+    loadUiStock(this);
     this.load.addFile(new WebFontFile(this.load, this.opts.fonts.pixel));
   }
 
   create() {
     this.world = this.scene.get("WorldScene") as WorldScene;
+    this.banners = [];
+    this.axisLabels = [];
     this.frame = this.add.container(0, 0).setDepth(UI_DEPTH.frame);
     this.column = this.add.container(0, 0).setDepth(UI_DEPTH.column);
     this.bar = this.add.container(0, 0).setDepth(UI_DEPTH.bar);

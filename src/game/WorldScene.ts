@@ -1,22 +1,13 @@
 import Phaser from "phaser";
-import { Band, dwellFyToTileY, footprintCells, isWater, type Segment, type TerrainGrid } from "./terrain";
-import {
-  GENERATED_TOTAL,
-  SHORE_FRAMES,
-  TILE,
-  WATER_FRAMES,
-  buildTerrainTileset,
-  interiorIndex,
-  materialsFromPack,
-  shoreIndex,
-  transitionIndex,
-  waterIndex,
-} from "./tileset";
-import { CLUTTER, FX, MONSTERS, SHEET, SURVEYOR, ZONE_COLOURS } from "./figures";
-import { hash, planClutter } from "./clutter";
+import { Band, dwellFyToTileY, footprintCells, type Segment, type TerrainGrid } from "./terrain";
+import { TILE } from "./tileset";
+import { CLUTTER, FX, MONSTERS, SHEET, ZONE_COLOURS } from "./figures";
+import { hash } from "./clutter";
 import { blueprintFor, greetingFor } from "./holdfasts";
 import { LAYOUT, mapViewport } from "./layout";
 import { EV, type CitadelHover, type GuardianEvent, type MonsterEvent, type ScoutsEvent, type WelcomeEvent, type ZoneReading } from "./events";
+import { Ground } from "./ground";
+import { loadWorldSheets } from "./assets";
 import { Surveyor } from "./Surveyor";
 import { SeaMonster } from "./SeaMonster";
 import { T } from "./theme";
@@ -42,8 +33,6 @@ export interface WorldData {
   ui: UIData;
 }
 
-const TOWN_GID = 1000;
-const GENERATED_KEY = "scree-terrain";
 const MOTE_KEY = "scree-mote";
 const SCALE = LAYOUT.scale;
 const TILE_PX = TILE * SCALE;
@@ -112,16 +101,8 @@ export class WorldScene extends Phaser.Scene {
   private worldW = 0;
   private worldH = 0;
 
-  private map!: Phaser.Tilemaps.Tilemap;
-  private water!: Phaser.Tilemaps.TilemapLayer;
-  private shallows!: Phaser.Tilemaps.TilemapLayer;
-  private terrain!: Phaser.Tilemaps.TilemapLayer;
+  private ground!: Ground;
   private boundaryLines!: Phaser.GameObjects.Graphics;
-
-  /** Tiles the water clock repaints, and the shore foam beside them. */
-  private waterTiles: { tx: number; ty: number; variant: number; band: Band }[] = [];
-  private shoreTiles: { tx: number; ty: number; mask: number }[] = [];
-  private waterFrame = 0;
 
   private surveyor!: Surveyor;
   private monsters: SeaMonster[] = [];
@@ -154,32 +135,33 @@ export class WorldScene extends Phaser.Scene {
     super({ key: "WorldScene" });
   }
 
+  /** A restart (a new book) begins from nothing: every list the last run filled is emptied here. */
   init(data: WorldData) {
     this.opts = data;
+    this.monsters = [];
+    this.stirred = new Set();
+    this.anchors = [];
+    this.blocked = new Set();
+    this.hoverCitadel = null;
+    this.hoverMonster = null;
+    this.scoutsRunning = false;
   }
 
-  /** Every sheet the world stands on: two CC0 packs and the sheets baked from them. */
+  /** Every sheet the world stands on; the landing may have loaded them already, in which case nothing is queued. */
   preload() {
-    const f16 = { frameWidth: 16, frameHeight: 16 };
-    this.load.spritesheet(SHEET.town, "/assets/kenney/tiny-town/tilemap_packed.png", f16);
-    this.load.spritesheet(SHEET.dungeon, "/assets/kenney/tiny-dungeon/tilemap_packed.png", f16);
-    this.load.spritesheet(SHEET.surveyor, "/assets/scree/surveyor.png", { frameWidth: SURVEYOR.frameWidth, frameHeight: SURVEYOR.frameHeight });
-    this.load.spritesheet(SHEET.monsters, "/assets/scree/monsters.png", { frameWidth: MONSTERS.frameWidth, frameHeight: MONSTERS.frameHeight });
-    this.load.spritesheet(SHEET.clutter, "/assets/scree/clutter.png", f16);
-    this.load.spritesheet(SHEET.peaks, "/assets/scree/peaks.png", { frameWidth: 16, frameHeight: 24 });
-    this.load.spritesheet(SHEET.fx, "/assets/scree/fx.png", f16);
+    loadWorldSheets(this);
   }
 
   create() {
     const { grid } = this.opts;
-    this.worldW = grid.cols * TILE_PX;
-    this.worldH = grid.rows * TILE_PX;
     Surveyor.registerAnimations(this);
     SeaMonster.registerAnimations(this);
 
-    this.buildTileset();
-    this.buildLayers();
-    this.animateTiles();
+    this.ground = new Ground(this, grid, { water: DEPTH.water, shallows: DEPTH.shallows, terrain: DEPTH.terrain });
+    this.worldW = this.ground.worldW;
+    this.worldH = this.ground.worldH;
+    this.ground.animate();
+    this.ensureMoteTexture();
     this.drawLines();
     this.drawAxis();
     this.raiseFaults();
@@ -203,95 +185,6 @@ export class WorldScene extends Phaser.Scene {
 
   private key(tx: number, ty: number): string {
     return `${tx},${ty}`;
-  }
-
-  /* ── tiles ────────────────────────────────────────────────────────── */
-
-  private buildTileset() {
-    const materials = materialsFromPack(this, SHEET.town);
-    buildTerrainTileset(this, GENERATED_KEY, materials);
-    this.ensureMoteTexture();
-  }
-
-  /**
-   * Three tilemap layers from one grid. Deep water at the bottom, then the
-   * shallows and the foaming shore; dry ground above, where interior tiles
-   * come from the pack or the generator and every edge is a generated
-   * transition chosen by the tile's corner mask.
-   */
-  private buildLayers() {
-    const { grid } = this.opts;
-    if (GENERATED_TOTAL > TOWN_GID) throw new Error("generated tileset collides with the pack's gid range");
-    this.map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: grid.cols, height: grid.rows });
-    const generated = this.map.addTilesetImage("generated", GENERATED_KEY, TILE, TILE, 0, 0, 0)!;
-    const town = this.map.addTilesetImage("town", SHEET.town, TILE, TILE, 0, 0, TOWN_GID)!;
-    const sets = [generated, town];
-
-    const blank = (name: string, depth: number) => {
-      const layer = this.map.createBlankLayer(name, sets, 0, 0, grid.cols, grid.rows, TILE, TILE)!;
-      layer.setScale(SCALE).setDepth(depth);
-      return layer;
-    };
-    this.water = blank("water", DEPTH.water);
-    this.shallows = blank("shallows", DEPTH.shallows);
-    this.terrain = blank("terrain", DEPTH.terrain);
-
-    // Interiors the pack draws better than the generator: its grass tiles
-    // seamlessly. Everything else, and every fourth-variant feature tile, is
-    // generated.
-    const packGrass = [0, 0, 0, 0, 1, 1, 2];
-
-    for (let ty = 0; ty < grid.rows; ty++) {
-      for (let tx = 0; tx < grid.cols; tx++) {
-        const tile = grid.tiles[ty * grid.cols + tx]!;
-        const variant = Math.floor(hash(tx, ty, 1) * 3);
-
-        if (tile.mask === 0) {
-          if (tile.lo <= Band.DEEP) {
-            this.water.putTileAt(waterIndex(tile.lo, 0, variant), tx, ty);
-            this.waterTiles.push({ tx, ty, variant, band: tile.lo });
-          } else if (tile.lo === Band.SHALLOW) {
-            this.shallows.putTileAt(waterIndex(Band.SHALLOW, 0, variant), tx, ty);
-            this.waterTiles.push({ tx, ty, variant, band: Band.SHALLOW });
-          } else if (hash(tx, ty, 2) < 0.08) {
-            this.terrain.putTileAt(interiorIndex(tile.lo, 3), tx, ty);
-          } else if (tile.lo === Band.GRASS && hash(tx, ty, 3) < 0.7) {
-            this.terrain.putTileAt(TOWN_GID + packGrass[Math.floor(hash(tx, ty, 4) * packGrass.length)]!, tx, ty);
-          } else {
-            this.terrain.putTileAt(interiorIndex(tile.lo, variant), tx, ty);
-          }
-          continue;
-        }
-
-        if (tile.lo === Band.ABYSS) {
-          this.water.putTileAt(transitionIndex(Band.ABYSS, tile.mask), tx, ty);
-        } else if (tile.lo === Band.DEEP) {
-          this.shallows.putTileAt(transitionIndex(Band.DEEP, tile.mask), tx, ty);
-        } else if (tile.lo === Band.SHALLOW) {
-          this.shallows.putTileAt(shoreIndex(tile.mask, 0), tx, ty);
-          this.shoreTiles.push({ tx, ty, mask: tile.mask });
-        } else {
-          this.terrain.putTileAt(transitionIndex(tile.lo, tile.mask), tx, ty);
-        }
-      }
-    }
-  }
-
-  /** The sea rolls: every water tile steps through its frames, the shore foam at half the rate. */
-  private animateTiles() {
-    this.time.addEvent({
-      delay: 130,
-      loop: true,
-      callback: () => {
-        this.waterFrame = (this.waterFrame + 1) % (WATER_FRAMES * 2);
-        const wf = this.waterFrame % WATER_FRAMES;
-        const sf = Math.floor(this.waterFrame / 2) % SHORE_FRAMES;
-        for (const w of this.waterTiles) {
-          (w.band === Band.SHALLOW ? this.shallows : this.water).putTileAt(waterIndex(w.band, wf, w.variant), w.tx, w.ty);
-        }
-        for (const s of this.shoreTiles) this.shallows.putTileAt(shoreIndex(s.mask, sf), s.tx, s.ty);
-      },
-    });
   }
 
   /** One world unit per screen pixel at the current zoom: line widths are drawn in screen terms. */
@@ -466,30 +359,9 @@ export class WorldScene extends Phaser.Scene {
 
   /* ── clutter ──────────────────────────────────────────────────────── */
 
-  /** The biomes filled from the planner: trees, pines, rocks, ruins, peaks, crystals that pulse. */
+  /** The biomes filled from the planner, y-sorted on the ground shelf. */
   private scatterClutter() {
-    const { grid } = this.opts;
-    const blocked = (tx: number, ty: number) => this.blocked.has(this.key(tx, ty));
-    for (const p of planClutter(grid, blocked)) {
-      const cat = CLUTTER[p.kind];
-      const frame = cat.frames[p.variant % cat.frames.length]!;
-      const x = (p.tx + p.ox) * TILE_PX;
-      const y = (p.ty + p.oy) * TILE_PX;
-      const depth = this.ySort(y);
-      this.add.image(x, y, cat.sheet, frame).setOrigin(0.5, 1).setScale(SCALE).setDepth(depth);
-      if (p.kind === "crystal") {
-        const glow = this.add.image(x, y - SCALE * 6, SHEET.fx, FX.glow).setScale(SCALE * 1.1).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 0.001).setAlpha(0.5);
-        this.tweens.add({
-          targets: glow,
-          alpha: { from: 0.25, to: 0.85 },
-          scale: { from: SCALE * 0.9, to: SCALE * 1.5 },
-          duration: 1500 + hash(p.tx, p.ty, 5) * 1400,
-          yoyo: true,
-          repeat: -1,
-          ease: "Sine.InOut",
-        });
-      }
-    }
+    this.ground.scatter((tx, ty) => this.blocked.has(this.key(tx, ty)), (y) => this.ySort(y));
   }
 
   /* ── the surveyor ─────────────────────────────────────────────────── */
@@ -637,7 +509,10 @@ export class WorldScene extends Phaser.Scene {
       this.drawLines();
     });
 
-    this.game.canvas.addEventListener("mouseleave", () => this.events.emit(EV.hoverEnd));
+    const canvas = this.game.canvas;
+    const leave = () => this.events.emit(EV.hoverEnd);
+    canvas.addEventListener("mouseleave", leave);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => canvas.removeEventListener("mouseleave", leave));
   }
 
   override update() {

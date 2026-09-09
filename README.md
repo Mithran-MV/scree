@@ -22,7 +22,12 @@ row per protocol and nowhere to put the boundary between them.
 
 ## How the ground is drawn
 
-The map is a Phaser 4 game in two scenes. `WorldScene` (`src/game/WorldScene.ts`)
+The map is a Phaser 4 game in three scenes. `LandingScene` is the door: the
+same ground the survey draws, drifted across by its own camera under a dark
+veil, with the title and a stone console holding one real text input and two
+brass buttons. Begin, and it fades into the world, handing the page the
+address to load and the world its data; a book that arrives later restarts the
+world on it. Behind the door, the survey runs in two scenes. `WorldScene` (`src/game/WorldScene.ts`)
 owns the camera and everything standing on the ground; `UIScene` is launched
 over it and owns the instrument: the top bar, the bezel, the title plate, the
 live feed, the log, the reading panel with its terrace-depth graph, and the

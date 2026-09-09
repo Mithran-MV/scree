@@ -73,23 +73,37 @@ export default function Page() {
    * present, the field is still there.
    */
   const [wallet, setWallet] = useState<string | null>(null);
-  const connect = useCallback(async () => {
+  /** Resolves with the account, null when the browser has no provider, and rejects when the wallet declines. */
+  const connectWallet = useCallback(async (): Promise<string | null> => {
     const eth = (window as unknown as { ethereum?: { request: (a: { method: string }) => Promise<unknown> } }).ethereum;
-    if (!eth) {
-      setError("No wallet found in this browser. Paste an address instead.");
-      return;
-    }
-    try {
-      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
-      const account = accounts[0];
-      if (!account) return;
+    if (!eth) return null;
+    const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
+    const account = accounts[0] ?? null;
+    if (account) {
       setWallet(account);
       setAddress(account);
-      await loadAddress(account);
+      void loadAddress(account);
+    }
+    return account;
+  }, [loadAddress]);
+  const connect = useCallback(async () => {
+    try {
+      const account = await connectWallet();
+      if (!account) setError("No wallet found in this browser. Paste an address instead.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "The wallet declined the request.");
     }
-  }, [loadAddress]);
+  }, [connectWallet]);
+
+  /** The door hands over an address, or none for the reference book. */
+  const begin = useCallback(
+    (target: string | null) => {
+      if (!target) return;
+      setAddress(target);
+      void loadAddress(target);
+    },
+    [loadAddress],
+  );
 
   return (
     <main className="stage">
@@ -103,6 +117,8 @@ export default function Page() {
         onAddress={setAddress}
         onSurvey={load}
         onConnect={connect}
+        connectWallet={connectWallet}
+        onBegin={begin}
         wallet={wallet}
         onReference={() => {
           setLoaded(DEMO);

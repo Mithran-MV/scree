@@ -425,6 +425,65 @@ function bakeButton(): Pix {
   return p;
 }
 
+/**
+ * The landing's console: a heavy frame of dressed stone with brass rivets
+ * around a dark face, 64×64, sliced at 20.
+ */
+function bakeFrame(): Pix {
+  const p = new Pix(64, 64);
+  const stone = rgb(96, 102, 112);
+  const stoneLight = rgb(134, 140, 150);
+  const stoneDark = rgb(62, 66, 76);
+  const mortar = rgb(30, 32, 40);
+  p.fill(0, 0, 64, 64, stone);
+  // Blocks around the border, 8 wide, with mortar between them.
+  for (let i = 0; i < 64; i += 8) {
+    for (const [x, y] of [[i, 2], [i, 12], [2, i], [12, i], [i, 50], [i, 60], [50, i], [60, i]] as const) {
+      p.fill(x, y, 8, 1, mortar);
+      p.fill(y, x, 1, 8, mortar);
+    }
+  }
+  for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) if (x < 20 || y < 20 || x >= 44 || y >= 44) { const g = hash(x, y, 80); if (g > 0.9) p.put(x, y, stoneLight); else if (g < 0.08) p.put(x, y, stoneDark); }
+  p.rectOutline(0, 0, 64, 64, P.shellEdge);
+  p.rectOutline(1, 1, 62, 62, stoneLight);
+  // The face and the brass line that seats it.
+  p.fill(18, 18, 28, 28, P.shellEdge);
+  p.fill(19, 19, 26, 26, P.brass);
+  p.fill(20, 20, 24, 24, P.shell);
+  for (let y = 20; y < 44; y++) for (let x = 20; x < 44; x++) if (hash(x, y, 81) > 0.93) p.put(x, y, P.shellLit);
+  // Rivets in the corners of the stone.
+  for (const [cx, cy] of [[6, 6], [54, 6], [6, 54], [54, 54]] as const) {
+    p.fill(cx, cy, 4, 4, P.brass);
+    p.put(cx, cy, mix(P.brass, P.vellumLit, 0.6));
+    p.put(cx + 3, cy + 3, mix(P.brass, P.shellEdge, 0.5));
+  }
+  return p;
+}
+
+/** The landing's big brass button, three states stacked: rest, hover, pressed. 120×36 each. */
+function bakeBigButton(): Pix {
+  const frames: Pix[] = [];
+  const draw = (body: RGBA, top: RGBA, bottom: RGBA, pressed: boolean): Pix => {
+    const p = new Pix(120, 36);
+    const y0 = pressed ? 3 : 0;
+    const h = 36 - y0;
+    p.fill(0, y0, 120, h, body);
+    p.fill(0, y0, 120, 3, top);
+    p.fill(0, 36 - (pressed ? 2 : 5), 120, pressed ? 2 : 5, bottom);
+    p.fill(1, y0 + 1, 2, h - 2, top);
+    p.fill(117, y0 + 1, 2, h - 2, bottom);
+    p.rectOutline(0, y0, 120, h, rgb(24, 24, 24));
+    for (const x of [1, 118]) { p.put(x, y0, CLEAR); p.put(x, 35, CLEAR); }
+    if (pressed) p.fill(0, 0, 120, 3, rgb(24, 24, 24, 120));
+    for (let y = y0 + 4; y < 32; y++) for (let x = 4; x < 116; x++) if (hash(x, y, 90) > 0.94) p.put(x, y, mix(body, top, 0.5));
+    return p;
+  };
+  frames.push(draw(P.brass, mix(P.brass, P.vellumLit, 0.45), mix(P.brass, P.shellEdge, 0.45), false));
+  frames.push(draw(mix(P.brass, P.vellumLit, 0.2), mix(P.brass, P.vellumLit, 0.6), mix(P.brass, P.shellEdge, 0.35), false));
+  frames.push(draw(mix(P.brass, P.shellEdge, 0.2), mix(P.brass, P.vellumLit, 0.25), mix(P.brass, P.shellEdge, 0.55), true));
+  return sheet(frames, 1, 120, 36);
+}
+
 /** The top bar's ground: dark ashlar with brass rivets and a ley trim, tileable in x. */
 function bakeTopbar(): Pix {
   const W = 64;
@@ -471,4 +530,6 @@ save("ui-panel.png", bakePanel());
 save("ui-console.png", bakeConsole());
 save("ui-button.png", bakeButton());
 save("ui-topbar.png", bakeTopbar());
+save("ui-frame.png", bakeFrame());
+save("ui-bigbutton.png", bakeBigButton());
 void scale;

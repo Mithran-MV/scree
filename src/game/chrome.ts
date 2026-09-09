@@ -14,6 +14,8 @@ export const UI = {
   console: "scree-ui-console",
   button: "scree-ui-button",
   topbar: "scree-ui-topbar",
+  frame: "scree-ui-frame",
+  bigButton: "scree-ui-bigbutton",
 } as const;
 
 /** A nine-slice of one of the baked frames, anchored at its top-left. */
