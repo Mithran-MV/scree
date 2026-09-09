@@ -218,18 +218,65 @@ export class UIScene extends Phaser.Scene {
     this.plate.add([nine(this, UI.panel, 0, 0, w, h), kicker, title, blurb]);
   }
 
-  /** The hover box, south-west of the screen, sized to what it says. */
+  /**
+   * The reading panel, pinned to the south-west corner of the screen: what
+   * the ground under the pointer says, with the terrace-depth graph set into
+   * its right-hand side, sized to its text and never larger than it needs.
+   */
   private showHover(title: string, body: string) {
     const v = mapViewport(this.scale.width, this.scale.height);
     const f = this.opts.fonts;
-    const w = 336;
     const pad = 14;
+    const textW = 236;
+    const chartW = 132;
+    const chartH = 68;
+    const w = pad + textW + 12 + chartW + pad;
     this.hover.removeAll(true);
-    const t = label(this, pad, pad - 3, title, { size: 8, font: f.pixel, color: T.vellumInk });
-    const b = label(this, pad, pad + 13, body, { size: 11, font: f.serif, color: T.vellumInkDim, wrap: w - pad * 2 });
-    const h = pad + 13 + b.height + pad - 2;
+    const t = label(this, pad, pad - 3, title, { size: 8, font: f.pixel, color: T.vellumInk, wrap: textW });
+    const b = label(this, pad, pad + t.height + 4, body, { size: 11, font: f.serif, color: T.vellumInkDim, wrap: textW });
+    const block = Math.max(t.height + 4 + b.height, chartH + 12);
+    const caption = label(this, pad, pad + block + 6, this.state.chart.note, { size: 8.5, font: f.mono, color: T.vellumInk, wrap: w - pad * 2 });
+    const h = pad + block + 6 + (this.state.chart.note ? caption.height : 0) + pad - 2;
     this.hover.setPosition(v.x + 14, v.y + v.h - 14 - h);
-    this.hover.add([nine(this, UI.panel, 0, 0, w, h), t, b]);
+    this.hover.add([nine(this, UI.panel, 0, 0, w, h), t, b, caption, ...this.miniChart(pad + textW + 12, pad, chartW, chartH)]);
+  }
+
+  /** Terrace depth in miniature: the crash edge against dwell, the proposed band shaded, the lifted curve beneath. */
+  private miniChart(x: number, y: number, w: number, h: number): Phaser.GameObjects.GameObject[] {
+    const f = this.opts.fonts;
+    const { curve, lifted, band } = this.state.chart;
+    const g = this.add.graphics();
+    g.fillStyle(0xffffff, 0.35);
+    g.fillRect(x, y + 12, w, h - 12);
+    g.lineStyle(1, T.vellumEdge, 0.7);
+    g.strokeRect(x, y + 12, w, h - 12);
+    const head = label(this, x, y - 3, "TERRACE DEPTH", { size: 7, font: f.pixel, color: T.vellumInkDim });
+    if (curve.length < 2) return [g, head];
+    const px = x + 4;
+    const py = y + 16;
+    const pw = w - 8;
+    const ph = h - 20;
+    const all = [...curve, ...(lifted ?? [])].map((c) => c.price);
+    const lo = Math.min(...all);
+    const hi = Math.max(...all);
+    const span = Math.max(hi - lo, hi * 0.01);
+    const tMax = curve[curve.length - 1]!.t;
+    const X = (t: number) => px + (t / tMax) * pw;
+    const Y = (p: number) => py + ph - ((p - (lo - span * 0.15)) / (span * 1.3)) * ph;
+    if (band) {
+      g.fillStyle(T.ley, 0.22);
+      g.fillRect(X(band.lo), py, Math.max(2, X(band.hi) - X(band.lo)), ph);
+    }
+    const stroke = (pts: { t: number; price: number }[], colour: number) => {
+      g.lineStyle(1.5, colour, 0.95);
+      g.beginPath();
+      pts.forEach((c, i) => (i === 0 ? g.moveTo(X(c.t), Y(c.price)) : g.lineTo(X(c.t), Y(c.price))));
+      g.strokePath();
+    };
+    stroke(curve, T.peril);
+    if (lifted) stroke(lifted, T.leyDim);
+    const axis = label(this, x + w, y + h - 9, `${Math.round(tMax)}d`, { size: 7, font: f.mono, color: T.vellumInkDim, align: "right" });
+    return [g, head, axis];
   }
 
   /** The instrument column on the right: controls, feed, log, chart. */
@@ -288,75 +335,20 @@ export class UIScene extends Phaser.Scene {
     }
     y += feedH + 8;
 
-    // The log: the last three things that happened on the ground.
-    const logH = 32 + 3 * 30;
+    // The log: what happened on the ground, newest first, filling what remains of the column.
+    const logH = Math.max(120, H - y - LAYOUT.frame);
     this.column.add(nine(this, UI.console, x0, y, cw, logH));
     this.column.add(label(this, x0 + pad, y + 11, "ON THE GROUND", { size: 8, font: f.pixel, color: T.ley }));
     if (this.log.length === 0) {
-      this.column.add(label(this, x0 + pad, y + 32, "Nothing yet. Click the map and the surveyor walks there.", { size: 10.5, color: T.inkDim, font: f.serif }));
+      this.column.add(label(this, x0 + pad, y + 32, "Nothing yet. Click the map and the surveyor walks there.", { size: 10.5, color: T.inkDim, font: f.serif, wrap: cw - pad * 2 }));
     }
-    this.log.slice(0, 3).forEach((line, i) => {
-      this.column.add(label(this, x0 + pad, y + 32 + i * 30, line, { size: 10.5, color: i === 0 ? T.ink : T.inkDim, font: f.serif, wrap: cw - pad * 2 }));
-    });
-    y += logH + 8;
-
-    // Terrace depth chart, filling what remains of the column.
-    const chartH = Math.max(120, H - y - LAYOUT.frame);
-    this.drawChart(x0, y, cw, chartH);
-  }
-
-  /**
-   * Terrace depth: the crash liquidation price against dwell, with the
-   * proposed terrace's dwell band shaded and its lifted curve drawn beneath.
-   */
-  private drawChart(x: number, y: number, w: number, h: number) {
-    const f = this.opts.fonts;
-    const { curve, lifted, band, note } = this.state.chart;
-    this.column.add(nine(this, UI.panel, x, y, w, h));
-    this.column.add(label(this, x + 14, y + 11, "TERRACE DEPTH", { size: 8, font: f.pixel, color: T.vellumInk }));
-    if (curve.length < 2) {
-      this.column.add(label(this, x + 14, y + 32, "No crash edge on this book.", { size: 10.5, color: T.vellumInkDim, font: f.serif }));
-      return;
+    let ly = y + 32;
+    for (const [i, line] of this.log.entries()) {
+      if (ly > y + logH - 24) break;
+      const t = label(this, x0 + pad, ly, line, { size: 10.5, color: i === 0 ? T.ink : T.inkDim, font: f.serif, wrap: cw - pad * 2 });
+      this.column.add(t);
+      ly += t.height + 8;
     }
-    const px = x + 16;
-    const py = y + 32;
-    const pw = w - 32;
-    const ph = h - 80;
-    const all = [...curve, ...(lifted ?? [])].map((c) => c.price);
-    const lo = Math.min(...all);
-    const hi = Math.max(...all);
-    const span = Math.max(hi - lo, hi * 0.01);
-    const tMax = curve[curve.length - 1]!.t;
-    const X = (t: number) => px + (t / tMax) * pw;
-    const Y = (p: number) => py + ph - ((p - (lo - span * 0.15)) / (span * 1.3)) * ph;
-
-    const g = this.add.graphics();
-    g.fillStyle(0xffffff, 0.3);
-    g.fillRect(px, py, pw, ph);
-    if (band) {
-      g.fillStyle(T.ley, 0.2);
-      g.fillRect(X(band.lo), py, X(band.hi) - X(band.lo), ph);
-    }
-    g.lineStyle(1, T.vellumEdge, 0.5);
-    for (const q of [0, 0.5, 1]) {
-      g.beginPath();
-      g.moveTo(px, py + ph * q);
-      g.lineTo(px + pw, py + ph * q);
-      g.strokePath();
-    }
-    const stroke = (pts: { t: number; price: number }[], colour: number, width: number) => {
-      g.lineStyle(width, colour, 0.95);
-      g.beginPath();
-      pts.forEach((c, i) => (i === 0 ? g.moveTo(X(c.t), Y(c.price)) : g.lineTo(X(c.t), Y(c.price))));
-      g.strokePath();
-    };
-    stroke(curve, T.peril, 1.6);
-    if (lifted) stroke(lifted, T.leyDim, 1.6);
-    this.column.add(g);
-    this.column.add(label(this, px, py + ph + 4, "0h", { size: 8.5, color: T.vellumInkDim, font: f.mono }));
-    this.column.add(label(this, px + pw, py + ph + 4, `${Math.round(tMax)}d`, { size: 8.5, color: T.vellumInkDim, align: "right", font: f.mono }));
-    this.column.add(label(this, px + pw / 2, py + ph + 4, "dwell", { size: 8.5, color: T.vellumInkDim, align: "center", font: f.mono }));
-    this.column.add(label(this, x + 14, y + h - 32, note, { size: 9.5, color: T.vellumInk, font: f.mono, wrap: w - 28 }));
   }
 
   /* ── pop-ups ──────────────────────────────────────────────────────── */
@@ -446,7 +438,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private note(line: string) {
-    this.log = [line, ...this.log].slice(0, 6);
+    this.log = [line, ...this.log].slice(0, 8);
     this.drawColumn();
   }
 }

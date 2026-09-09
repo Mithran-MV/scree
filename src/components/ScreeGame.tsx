@@ -8,7 +8,7 @@ import { bindingDeployment, dwellYears, elevation, exposure, liquidationPrice, w
 import { fittedWindow, priceAt, rasterize } from "@/field/raster";
 import { extractFeatures } from "@/field/features";
 import { walkPaths } from "@/sim/paths";
-import { bandOf, buildTerrainGrid } from "@/game/terrain";
+import { bandOf, buildTerrainGrid, mapFxOf, warpFx } from "@/game/terrain";
 import type { ZoneReading } from "@/game/events";
 import type { ScoutPath, Terrace, WorldData, WorldScene } from "@/game/WorldScene";
 import type { FeedRow, PushedState, TerraceChart, UIScene } from "@/game/UIScene";
@@ -72,10 +72,14 @@ export function ScreeGame(props: Props) {
     };
   }, [win]);
 
-  /** The book's reading at a point on the map: what the hover box and the surveyor report. */
+  /**
+   * The book's reading at a point on the map: what the hover box and the
+   * surveyor report. The map column is warped into the price axis first, at
+   * the map height (the dwell axis is drawn square-rooted).
+   */
   const readAt = useCallback(
-    (fx: number, fy: number): ZoneReading => {
-      const price = axes.priceOf(fx);
+    (fxMap: number, fy: number): ZoneReading => {
+      const price = axes.priceOf(warpFx(fxMap, Math.sqrt(clamp01(fy))));
       const dwellDays = axes.dwellOf(fy);
       const t = dwellYears(dwellDays);
       const z = elevation(baskets, price, t);
@@ -101,8 +105,8 @@ export function ScreeGame(props: Props) {
     if (br.lower === null) return [];
     return [
       {
-        priceFxLo: axes.fxOf(br.lower * PROPOSED.below),
-        priceFxHi: axes.fxOf(br.lower * PROPOSED.above),
+        priceFxLo: mapFxOf(axes.fxOf(br.lower * PROPOSED.below), 0),
+        priceFxHi: mapFxOf(axes.fxOf(br.lower * PROPOSED.above), 0),
         dwellFyLo: 0,
         dwellFyHi: axes.fyOf(PROPOSED.days),
         liftHF: PROPOSED.lift,
@@ -186,7 +190,10 @@ export function ScreeGame(props: Props) {
     if (!world) return;
     const run = walkPaths(baskets, { spot, count: 200, horizonDays: 30, steps: 60, volatility: 0.65, seed: 20260908 });
     const paths: ScoutPath[] = run.paths.map((p) => ({
-      points: p.prices.map((price, i) => ({ fx: axes.fxOf(price), fy: axes.fyOf(p.dwellDays[i]!) })),
+      points: p.prices.map((price, i) => {
+        const fy = axes.fyOf(p.dwellDays[i]!);
+        return { fx: mapFxOf(axes.fxOf(price), Math.sqrt(fy)), fy };
+      }),
       diedAt: p.diedAt,
     }));
     world.sendScouts(paths);

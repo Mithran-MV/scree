@@ -12,7 +12,7 @@ import {
   transitionIndex,
   waterIndex,
 } from "./tileset";
-import { CLUTTER, FX, MONSTERS, SHEET, SURVEYOR, TERRACE, WALL_PIECES, ZONE_COLOURS } from "./figures";
+import { CLUTTER, FX, MONSTERS, SHEET, SURVEYOR, ZONE_COLOURS } from "./figures";
 import { hash, planClutter } from "./clutter";
 import { blueprintFor, greetingFor } from "./holdfasts";
 import { LAYOUT, mapViewport } from "./layout";
@@ -47,7 +47,6 @@ export interface WorldData {
 }
 
 const TOWN_GID = 1000;
-const ROADS_GID = 2000;
 const GENERATED_KEY = "scree-terrain";
 const MOTE_KEY = "scree-mote";
 const SCALE = LAYOUT.scale;
@@ -63,10 +62,8 @@ export const DEPTH = {
   water: 0,
   shallows: 1,
   terrain: 10,
-  roads: 12,
   lines: 14,
   terraces: 16,
-  terraceGlow: 17,
   ground: 20, // + y-sort, up to 24
   particles: 25,
   scouts: 28,
@@ -129,8 +126,6 @@ export class WorldScene extends Phaser.Scene {
   private water!: Phaser.Tilemaps.TilemapLayer;
   private shallows!: Phaser.Tilemaps.TilemapLayer;
   private terrain!: Phaser.Tilemaps.TilemapLayer;
-  private roads!: Phaser.Tilemaps.TilemapLayer;
-  private terraceLayer!: Phaser.Tilemaps.TilemapLayer;
   private terraceGlow!: Phaser.GameObjects.Graphics;
   private boundaryLines!: Phaser.GameObjects.Graphics;
   private terraces: Terrace[] = [];
@@ -167,7 +162,6 @@ export class WorldScene extends Phaser.Scene {
     this.load.spritesheet(SHEET.clutter, "/assets/scree/clutter.png", f16);
     this.load.spritesheet(SHEET.peaks, "/assets/scree/peaks.png", { frameWidth: 16, frameHeight: 24 });
     this.load.spritesheet(SHEET.fx, "/assets/scree/fx.png", f16);
-    this.load.image(SHEET.roads, "/assets/scree/roads.png");
   }
 
   create() {
@@ -182,7 +176,7 @@ export class WorldScene extends Phaser.Scene {
     this.animateTiles();
     this.drawLines();
     this.setTerraces(this.opts.terraces);
-    this.raiseBorders();
+    this.raiseFaults();
     this.raiseHoldfasts();
     this.placeSurveyor();
     this.scatterClutter();
@@ -214,10 +208,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Five tilemap layers from one grid. Deep water at the bottom, then the
+   * Three tilemap layers from one grid. Deep water at the bottom, then the
    * shallows and the foaming shore; dry ground above, where interior tiles
    * come from the pack or the generator and every edge is a generated
-   * transition chosen by the tile's corner mask; roads; terraces.
+   * transition chosen by the tile's corner mask.
    */
   private buildLayers() {
     const { grid } = this.opts;
@@ -225,8 +219,7 @@ export class WorldScene extends Phaser.Scene {
     this.map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: grid.cols, height: grid.rows });
     const generated = this.map.addTilesetImage("generated", GENERATED_KEY, TILE, TILE, 0, 0, 0)!;
     const town = this.map.addTilesetImage("town", SHEET.town, TILE, TILE, 0, 0, TOWN_GID)!;
-    const roads = this.map.addTilesetImage("roads", SHEET.roads, TILE, TILE, 0, 0, ROADS_GID)!;
-    const sets = [generated, town, roads];
+    const sets = [generated, town];
 
     const blank = (name: string, depth: number) => {
       const layer = this.map.createBlankLayer(name, sets, 0, 0, grid.cols, grid.rows, TILE, TILE)!;
@@ -236,8 +229,6 @@ export class WorldScene extends Phaser.Scene {
     this.water = blank("water", DEPTH.water);
     this.shallows = blank("shallows", DEPTH.shallows);
     this.terrain = blank("terrain", DEPTH.terrain);
-    this.roads = blank("roads", DEPTH.roads);
-    this.terraceLayer = blank("terraces", DEPTH.terraces);
 
     // Interiors the pack draws better than the generator: its grass tiles
     // seamlessly. Everything else, and every fourth-variant feature tile, is
@@ -300,61 +291,61 @@ export class WorldScene extends Phaser.Scene {
     return 1 / (this.cameras.main?.zoom || 1);
   }
 
-  /** The liquidation line as light along the shore, and a faint ley under the borders' roads and walls. */
+  /** The liquidation line as light along the shore, and the faults as ley that breathes under the crags. */
   private drawLines() {
     const { grid } = this.opts;
     this.boundaryLines?.destroy();
     const g = this.add.graphics().setDepth(DEPTH.lines);
     const px = this.screenPx();
-    glowLines(g, grid.boundaries, T.ley, T.leyBright, px, 0.45);
+    glowLines(g, grid.boundaries, T.ley, T.leyBright, px, 0.7);
     glowLines(g, grid.shoreline, T.peril, T.perilBright, px);
+    this.tweens.add({ targets: g, alpha: { from: 0.55, to: 1 }, duration: 1900, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.boundaryLines = g;
   }
 
   /* ── terraces ─────────────────────────────────────────────────────── */
 
-  /** Replace the defence geometry: castle-wall platforms over the price × dwell bands. */
+  /** Mark the defence geometry: a survey outline over each price × dwell band, nothing that hides the ground. */
   setTerraces(terraces: Terrace[]) {
     const { grid } = this.opts;
     this.terraces = terraces;
-    this.terraceLayer.fill(-1);
     this.terraceGlow?.destroy();
-    this.terraceGlow = this.add.graphics().setDepth(DEPTH.terraceGlow);
-
+    this.terraceGlow = this.add.graphics().setDepth(DEPTH.terraces).setAlpha(0.7);
     for (const t of terraces) {
       const x0 = Math.max(0, Math.floor(t.priceFxLo * grid.cols));
       const x1 = Math.min(grid.cols - 1, Math.ceil(t.priceFxHi * grid.cols) - 1);
       const y0 = Math.max(0, Math.floor(dwellFyToTileY(t.dwellFyHi, grid.rows)));
       const y1 = Math.min(grid.rows - 1, Math.ceil(dwellFyToTileY(t.dwellFyLo, grid.rows)) - 1);
-      for (let ty = y0; ty <= y1; ty++) {
-        for (let tx = x0; tx <= x1; tx++) {
-          const row = ty === y0 ? TERRACE.top : ty === y1 ? TERRACE.bottom : TERRACE.body;
-          const col = tx === x0 ? 0 : tx === x1 ? 2 : 1;
-          this.terraceLayer.putTileAt(TOWN_GID + row[col]!, tx, ty);
-        }
-      }
       glowRect(this.terraceGlow, x0 * TILE_PX, y0 * TILE_PX, (x1 - x0 + 1) * TILE_PX, (y1 - y0 + 1) * TILE_PX, T.ley, T.leyBright, this.screenPx());
     }
   }
 
   /* ── borders ──────────────────────────────────────────────────────── */
 
-  /** The creases made physical: cobbled roads where books of one side hand over, ruined walls on the pass. */
-  private raiseBorders() {
-    for (const b of this.opts.grid.borders) {
+  /**
+   * The creases made physical: a chain of crags along each fault, denser
+   * on the pass and studded with the stones of whatever once stood there.
+   * The ley under them (drawLines) breathes; the crags sit where the argmin
+   * changes, offset inside their tiles so the chain winds.
+   */
+  private raiseFaults() {
+    const { grid } = this.opts;
+    for (const b of grid.borders) {
       this.blocked.add(this.key(b.tx, b.ty));
-      if (b.kind === "road") {
-        this.roads.putTileAt(ROADS_GID + Math.floor(hash(b.tx, b.ty, 9) * 3), b.tx, b.ty);
-        continue;
-      }
-      if (hash(b.tx, b.ty, 10) < 0.22) continue; // a gap in the wall: it is a ruin
-      const x = (b.tx + 0.5) * TILE_PX;
-      const y = (b.ty + 1) * TILE_PX;
-      const piece = WALL_PIECES[Math.floor(hash(b.tx, b.ty, 11) * WALL_PIECES.length)]!;
-      this.add.image(x, y, SHEET.town, piece).setOrigin(0.5, 1).setScale(SCALE).setDepth(this.ySort(y));
-      if (hash(b.tx, b.ty, 12) > 0.6) {
-        const upper = WALL_PIECES[Math.floor(hash(b.tx, b.ty, 13) * WALL_PIECES.length)]!;
-        this.add.image(x, y - TILE_PX * 0.9, SHEET.town, upper).setOrigin(0.5, 1).setScale(SCALE).setDepth(this.ySort(y) + 0.001);
+      const pass = b.kind === "pass";
+      if (hash(b.tx, b.ty, 10) > (pass ? 0.85 : 0.6)) continue;
+      const band = grid.tiles[b.ty * grid.cols + b.tx]!.lo;
+      const roll = hash(b.tx, b.ty, 11);
+      const set = pass && roll < 0.3 ? CLUTTER.ruin : pass && roll < 0.4 ? CLUTTER.pillar : band === Band.SNOW ? CLUTTER.snowrock : CLUTTER.rock;
+      const frame = set.frames[Math.floor(hash(b.tx, b.ty, 12) * set.frames.length)]!;
+      const x = (b.tx + 0.25 + hash(b.tx, b.ty, 13) * 0.5) * TILE_PX;
+      const y = (b.ty + 0.65 + hash(b.tx, b.ty, 14) * 0.3) * TILE_PX;
+      this.add.image(x, y, set.sheet, frame).setOrigin(0.5, 1).setScale(SCALE).setDepth(this.ySort(y));
+      if (hash(b.tx, b.ty, 15) > 0.55) {
+        const second = CLUTTER.rock.frames[Math.floor(hash(b.tx, b.ty, 16) * 3)]!;
+        const x2 = (b.tx + 0.2 + hash(b.tx, b.ty, 17) * 0.6) * TILE_PX;
+        const y2 = (b.ty + 0.35 + hash(b.tx, b.ty, 18) * 0.3) * TILE_PX;
+        this.add.image(x2, y2, CLUTTER.rock.sheet, second).setOrigin(0.5, 1).setScale(SCALE * 0.8).setDepth(this.ySort(y2));
       }
     }
   }
@@ -467,7 +458,7 @@ export class WorldScene extends Phaser.Scene {
   /** The biomes filled from the planner: trees, pines, rocks, ruins, peaks, crystals that pulse. */
   private scatterClutter() {
     const { grid } = this.opts;
-    const blocked = (tx: number, ty: number) => this.blocked.has(this.key(tx, ty)) || this.terraceLayer.hasTileAt(tx, ty) || this.roads.hasTileAt(tx, ty);
+    const blocked = (tx: number, ty: number) => this.blocked.has(this.key(tx, ty));
     for (const p of planClutter(grid, blocked)) {
       const cat = CLUTTER[p.kind];
       const frame = cat.frames[p.variant % cat.frames.length]!;
@@ -506,13 +497,13 @@ export class WorldScene extends Phaser.Scene {
   /**
    * One leviathan per deep basin. Deep water is split into its connected
    * basins first, so a monster never crosses land to reach a waypoint, and
-   * waypoints sit at least two tiles from anything that is not deep.
+   * waypoints keep a tile of deep water around them.
    */
   private spawnLeviathans() {
     const { grid } = this.opts;
     const deepAt = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < grid.cols && ty < grid.rows && grid.tiles[ty * grid.cols + tx]!.lo === Band.DEEP && grid.tiles[ty * grid.cols + tx]!.mask === 0;
     const open = (tx: number, ty: number) => {
-      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (!deepAt(tx + dx, ty + dy)) return false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!deepAt(tx + dx, ty + dy)) return false;
       return true;
     };
     const seen = new Set<string>();

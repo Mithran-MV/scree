@@ -14,7 +14,6 @@ export const SHEET = {
   clutter: "scree-clutter",
   peaks: "scree-peaks",
   fx: "scree-fx",
-  roads: "scree-roads",
 } as const;
 
 /** Particle motes and living parts, frames of the fx sheet. */
@@ -53,16 +52,6 @@ export const CLUTTER: Record<ClutterKind, { sheet: string; frames: readonly numb
   peak: { sheet: SHEET.peaks, frames: [0, 1, 2] },
   snowpeak: { sheet: SHEET.peaks, frames: [3, 4, 5] },
 };
-
-/** Ruined wall pieces along a long/short border, Tiny Town frames. */
-export const WALL_PIECES = [125, 126, 111] as const;
-
-/** Terrace platform: the pack's castle wall as a 9-slice (left, middle, right per row). */
-export const TERRACE = {
-  top: [96, 97, 98] as readonly number[],
-  body: [108, 109, 110] as readonly number[],
-  bottom: [120, 121, 122] as readonly number[],
-} as const;
 
 /** Colours for zone flags and boundaries, by zone order. */
 export const ZONE_COLOURS = [0x35e0e8, 0xe0b25a, 0xe2603a, 0x9bb06f, 0xc58bd6, 0x6fa8dc];

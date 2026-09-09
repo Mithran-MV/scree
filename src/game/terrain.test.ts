@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { bracket } from "@/core/bracket";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
-import { fittedWindow, priceAt, rasterize } from "@/field/raster";
-import { Band, CORNER, TILE_PX, bandOf, buildTerrainGrid, dwellFyToTileY, footprintCells, isWater, priceFxToTileX } from "./terrain";
+import { dwellAt, fittedWindow, priceAt, rasterize } from "@/field/raster";
+import { dwellYears, elevation } from "@/core/kernel";
+import { Band, CORNER, RELIEF, TILE_PX, bandOf, buildTerrainGrid, dwellFyToTileY, footprintCells, heightAt, isWater, mapFxOf, priceFxToTileX, warpFx } from "./terrain";
 
 const br = bracket(CARRY_BOOK, 0);
 const win = fittedWindow(SPOT_ETH_USD, br.lower, br.upper);
@@ -67,8 +68,8 @@ describe("buildTerrainGrid", () => {
 
   it("puts the crash edge on the shoreline of the bottom row", () => {
     const bottom = grid.rows - 1;
-    const wet = tileAt(Math.floor(priceFxToTileX(fxOf(br.lower! * 0.9), grid.cols)), bottom);
-    const dry = tileAt(Math.floor(priceFxToTileX(fxOf(br.lower! * 1.12), grid.cols)), bottom);
+    const wet = tileAt(Math.floor(priceFxToTileX(mapFxOf(fxOf(br.lower! * 0.9), 0), grid.cols)), bottom);
+    const dry = tileAt(Math.floor(priceFxToTileX(mapFxOf(fxOf(br.lower! * 1.12), 0), grid.cols)), bottom);
     expect(isWater(wet.lo)).toBe(true);
     expect(isWater(dry.lo)).toBe(false);
     expect(grid.shoreline.length).toBeGreaterThan(0);
@@ -122,11 +123,47 @@ describe("buildTerrainGrid", () => {
     }
   });
 
-  it("walls the pass where a long book meets a short one, and roads the rest", () => {
+  it("marks the pass where a long book meets a short one, and a fault on the rest", () => {
     const kinds = new Set(grid.borders.map((b) => b.kind));
     // The reference book is mixed, so it has both a pass and a same-side handover.
-    expect(kinds.has("wall")).toBe(true);
-    expect(kinds.has("road")).toBe(true);
+    expect(kinds.has("pass")).toBe(true);
+    expect(kinds.has("fault")).toBe(true);
+  });
+
+  it("keeps every holdfast clear of the map edge", () => {
+    for (const c of grid.citadels) {
+      expect(c.ty).toBeLessThan(grid.rows - RELIEF.seatMargin);
+      expect(c.ty - c.footprint.rise + 1).toBeGreaterThanOrEqual(RELIEF.seatMargin);
+      expect(c.tx - Math.floor(c.footprint.w / 2)).toBeGreaterThanOrEqual(RELIEF.seatMargin);
+    }
+  });
+});
+
+describe("relief", () => {
+  it("bends the price axis and bends it back", () => {
+    for (const [fx, fy] of [[0.2, 0.1], [0.5, 0.5], [0.8, 0.9], [0.05, 0.3]] as const) {
+      expect(Math.abs(warpFx(mapFxOf(fx, fy), fy) - fx)).toBeLessThan(1e-4);
+    }
+  });
+
+  it("bends the coast: the shoreline is not a straight vertical line", () => {
+    const xs = grid.shoreline.filter((s) => s.y1 < grid.rows / 2).map((s) => s.x1);
+    const west = xs.filter((x) => x < grid.cols / 2);
+    expect(Math.max(...west) - Math.min(...west)).toBeGreaterThan(2);
+  });
+
+  it("never moves sea level: relief keeps every point on the side of the shore the book puts it", () => {
+    const { width: fw, height: fh } = raster.window;
+    const ceiling = grid.ceiling;
+    for (let i = 0; i < 400; i++) {
+      const col = (i * 37) % fw;
+      const row = (i * 53) % fh;
+      const { z } = heightAt(raster, CARRY_BOOK, col, row, ceiling);
+      const colField = warpFx(col / (fw - 1), row / (fh - 1)) * (fw - 1);
+      const raw = elevation(CARRY_BOOK, priceAt(win, colField), dwellYears(dwellAt(win, row)));
+      if (!Number.isFinite(raw) || raw === 0) continue;
+      expect(Math.sign(z)).toBe(Math.sign(raw));
+    }
   });
 
   it("ranks territories by share of the dry ground, largest first", () => {

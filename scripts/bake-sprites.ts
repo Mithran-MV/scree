@@ -5,8 +5,8 @@
  *
  * Nothing here is hand-drawn at runtime. The surveyor's walk cycle and the
  * sea monsters' swim/dive/surface frames are derived from single CC0 frames
- * in Kenney's Tiny Dungeon; everything else — clutter, peaks, roads, particle
- * motes, the interface's nine-slice panels and the top bar — is drawn from
+ * in Kenney's Tiny Dungeon; everything else — clutter, peaks, particle motes,
+ * the interface's nine-slice panels and the top bar — is drawn from
  * the project's palette. Output goes to public/assets/scree/.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -59,9 +59,6 @@ const P = {
   shellLit: hex(0x2c3d49),
   bevel: hex(0x3d5461),
   shellEdge: hex(0x0b1116),
-  cobble: rgb(126, 118, 104),
-  cobbleLight: rgb(158, 150, 136),
-  mortar: rgb(74, 68, 60),
 };
 
 /* ── the surveyor ────────────────────────────────────────────────────── */
@@ -363,30 +360,6 @@ function bakeFx(): Pix {
   return sheet([bubble, droplet, spark, smoke, cog, orb, glow, window], 8, 16, 16);
 }
 
-/* ── roads ───────────────────────────────────────────────────────────── */
-
-function cobble(seed: number): Pix {
-  const p = new Pix(16, 16);
-  p.fill(0, 0, 16, 16, P.mortar);
-  for (let row = 0; row < 4; row++) {
-    const offset = row % 2 === 0 ? 0 : 2;
-    for (let x = -2 + offset; x < 16; x += 4) {
-      const w = 3 + Math.floor(hash(x, row + seed, 30) * 2) - 1;
-      const y0 = row * 4;
-      const tone = hash(x, row, seed + 31);
-      const base = tone < 0.25 ? P.cobbleLight : tone > 0.8 ? mix(P.cobble, P.mortar, 0.35) : P.cobble;
-      p.fill(x, y0, w, 3, base);
-      p.fill(x, y0, w, 1, mix(base, P.cobbleLight, 0.5));
-      p.put(x + w - 1, y0 + 2, mix(base, P.mortar, 0.5));
-    }
-  }
-  return p;
-}
-
-function bakeRoads(): Pix {
-  return sheet([cobble(1), cobble(2), cobble(3)], 3, 16, 16);
-}
-
 /* ── the interface ───────────────────────────────────────────────────── */
 
 /** Parchment nine-slice, 48×48, sliced at 12. */
@@ -481,7 +454,6 @@ save("monsters.png", bakeMonsters());
 save("clutter.png", bakeClutter());
 save("peaks.png", bakePeaks());
 save("fx.png", bakeFx());
-save("roads.png", bakeRoads());
 save("ui-panel.png", bakePanel());
 save("ui-console.png", bakeConsole());
 save("ui-button.png", bakeButton());
