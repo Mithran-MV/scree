@@ -14,6 +14,8 @@ const ScreeGame = dynamic(
 
 interface Loaded {
   baskets: Basket[];
+  /** Today's price of the charted asset, as the deployments reported it. */
+  spot: number;
   label: string;
   failed: { deploymentId: string; reason: string }[];
   offAxisCollateralUSD: number;
@@ -21,6 +23,7 @@ interface Loaded {
 
 const DEMO: Loaded = {
   baskets: CARRY_BOOK,
+  spot: SPOT_ETH_USD,
   label: "reference carry book",
   failed: [],
   offAxisCollateralUSD: 0.153 * 110_000,
@@ -51,8 +54,9 @@ export default function Page() {
       }
       setLoaded({
         baskets: body.baskets,
+        spot: typeof body.spot === "number" && body.spot > 0 ? body.spot : SPOT_ETH_USD,
         label: `${target.slice(0, 6)}…${target.slice(-4)}`,
-        failed: body.failed ?? [],
+        failed: [...(body.failed ?? []), ...(body.excluded ?? [])],
         offAxisCollateralUSD: body.offAxisCollateralUSD ?? 0,
       });
     } catch (err) {
@@ -110,7 +114,7 @@ export default function Page() {
       <ScreeGame
         baskets={loaded.baskets}
         label={loaded.label}
-        spot={SPOT_ETH_USD}
+        spot={loaded.spot}
         busy={busy}
         error={error}
         address={address}
@@ -130,7 +134,7 @@ export default function Page() {
       {plate && (
         <div className="plate-overlay" onClick={() => setPlate(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <TerrainMap baskets={loaded.baskets} spot={SPOT_ETH_USD} onHover={() => {}} />
+            <TerrainMap baskets={loaded.baskets} spot={loaded.spot} onHover={() => {}} />
           </div>
         </div>
       )}

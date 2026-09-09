@@ -33,6 +33,14 @@ export const WALLET_POSITIONS = /* GraphQL */ `
         }
       }
     }
+    spot: markets(
+      first: 1
+      where: { inputToken_: { symbol_in: ["WETH", "WETH.e"] } }
+      orderBy: totalValueLockedUSD
+      orderDirection: desc
+    ) {
+      inputTokenPriceUSD
+    }
     _meta {
       block {
         number

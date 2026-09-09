@@ -8,8 +8,8 @@ import {
 } from "@/registry/deployments";
 import verified from "@/registry/verified.json";
 import { fanOut } from "@/graph/client";
-import { offAxisCollateralUSD, reduceToBaskets } from "@/graph/reduce";
-import { walletShape } from "@/core/kernel";
+import { median, offAxisCollateralUSD, reduceToBaskets, spotFromLegs } from "@/graph/reduce";
+import { healthFactor, walletShape } from "@/core/kernel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,12 +63,36 @@ export async function GET(request: Request) {
   }
 
   const result = await fanOut(address, deployments, { apiKey });
-  const baskets = reduceToBaskets(result.legs);
+
+  // Today's price of the charted asset: what the deployments themselves say,
+  // agreed by median, and failing that whatever the wallet's own legs report.
+  const quoted = Object.values(result.spotUSD);
+  const spot = quoted.length ? median(quoted) : spotFromLegs(result.legs);
+
+  const reduced = reduceToBaskets(result.legs, undefined, spot);
+
+  // A position that is open on-chain but under water by the schema's own
+  // thresholds is being held up by something the schema does not carry, an
+  // efficiency mode most often. Drawing it would flood the map with a
+  // liquidation that is not happening, so it is set aside and named.
+  const excluded: { deploymentId: string; reason: string }[] = [];
+  const baskets = reduced.filter((b) => {
+    if (spot === null) return true;
+    const hf = healthFactor(b, spot, 0);
+    if (hf >= 1) return true;
+    excluded.push({
+      deploymentId: b.deploymentId,
+      reason: `health ${hf.toFixed(2)} at today's price by the schema's thresholds, yet the position is open; an efficiency mode the schema does not expose must apply`,
+    });
+    return false;
+  });
 
   return NextResponse.json(
     {
       address,
+      spot,
       baskets,
+      excluded,
       shape: walletShape(baskets),
       offAxisCollateralUSD: offAxisCollateralUSD(result.legs),
       blockHeights: result.blockHeights,

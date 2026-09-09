@@ -1,6 +1,6 @@
 import type { Deployment } from "../core/types";
 import { WALLET_POSITIONS } from "./query";
-import { normalizeResponse, type RawResponse } from "./normalize";
+import { normalizeResponse, spotOf, type RawResponse } from "./normalize";
 import type { WalletLeg } from "./reduce";
 
 const GATEWAY = "https://gateway.thegraph.com/api";
@@ -9,6 +9,8 @@ export interface FanOutResult {
   legs: WalletLeg[];
   /** Block height per deployment, so every number on the map can cite a source. */
   blockHeights: Record<string, number>;
+  /** Each deployment's own price for the charted asset, where it has a market in it. */
+  spotUSD: Record<string, number>;
   /** Deployments that answered, and deployments that did not, both named. */
   healthy: string[];
   failed: { deploymentId: string; reason: string }[];
@@ -69,6 +71,7 @@ export async function fanOut(
 
   const legs: WalletLeg[] = [];
   const blockHeights: Record<string, number> = {};
+  const spotUSD: Record<string, number> = {};
   const healthy: string[] = [];
   const failed: { deploymentId: string; reason: string }[] = [];
 
@@ -80,8 +83,10 @@ export async function fanOut(
     if (!("data" in r) || !r.data) continue;
     healthy.push(r.d.id);
     blockHeights[r.d.id] = r.data._meta.block.number;
+    const spot = spotOf(r.data);
+    if (spot !== null) spotUSD[r.d.id] = spot;
     legs.push(...normalizeResponse(r.data, r.d.id));
   }
 
-  return { legs, blockHeights, healthy, failed };
+  return { legs, blockHeights, spotUSD, healthy, failed };
 }

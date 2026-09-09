@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ETH, offAxisCollateralUSD, reduceToBaskets, type WalletLeg } from "./reduce";
+import { ETH, offAxisCollateralUSD, reduceToBaskets, spotFromLegs, type WalletLeg } from "./reduce";
 import { CARRY_BOOK } from "../core/fixtures/carry-book";
 import type { Market } from "../core/types";
 
@@ -148,5 +148,52 @@ describe("offAxisCollateralUSD", () => {
         { deploymentId: "d", market: market({ symbol: "WETH" }), side: "BORROW", quantity: 1 },
       ]),
     ).toBe(0);
+  });
+});
+
+describe("the ETH family", () => {
+  const spot = 2500;
+  const loop: WalletLeg[] = [
+    {
+      deploymentId: "aave-v3-ethereum",
+      market: market({ symbol: "rsETH", liquidationThreshold: 0.75, inputTokenPriceUSD: 2700 }),
+      side: "SUPPLY",
+      quantity: 100,
+    },
+    {
+      deploymentId: "aave-v3-ethereum",
+      market: market({ symbol: "WETH", inputTokenPriceUSD: spot, borrowRate: 0.02 }),
+      side: "BORROW",
+      quantity: 80,
+    },
+  ];
+
+  it("counts a staking receipt as the charted asset, so a loop is flat rather than short", () => {
+    const [b] = reduceToBaskets(loop, ETH, spot);
+    expect(b!.c).toBe(0);
+    expect(b!.v).toBe(0);
+    expect(b!.u).toBe(80);
+    // 100 rsETH at 2700 is 108 ETH of value, times the threshold.
+    expect(b!.a).toBeCloseTo(108 * 0.75, 9);
+  });
+
+  it("measures a receipt at its own price against spot, not one for one", () => {
+    const [atPar] = reduceToBaskets(loop, ETH, 2700);
+    expect(atPar!.a).toBeCloseTo(100 * 0.75, 9);
+    const [atPremium] = reduceToBaskets(loop, ETH, 2500);
+    expect(atPremium!.a).toBeGreaterThan(atPar!.a);
+  });
+
+  it("reads spot from a bare WETH leg before any receipt", () => {
+    expect(spotFromLegs(loop)).toBe(spot);
+    const receiptsOnly = loop.filter((l) => l.market.token.symbol !== "WETH");
+    expect(spotFromLegs(receiptsOnly)).toBe(2700);
+    expect(spotFromLegs([])).toBeNull();
+  });
+
+  it("derives spot from the legs when none is given", () => {
+    const given = reduceToBaskets(loop, ETH, spot);
+    const derived = reduceToBaskets(loop);
+    expect(derived[0]!.a).toBeCloseTo(given[0]!.a, 9);
   });
 });

@@ -25,7 +25,17 @@ export interface RawMarket {
 
 export interface RawResponse {
   account: { id: string; positions: RawPosition[] } | null;
+  /** The deployment's own price for the charted asset, from its largest WETH market. */
+  spot?: { inputTokenPriceUSD: string }[];
   _meta: { block: { number: number } };
+}
+
+/** The deployment's price for the charted asset, or null if it has no such market. */
+export function spotOf(res: RawResponse): number | null {
+  const raw = res.spot?.[0]?.inputTokenPriceUSD;
+  if (raw === undefined) return null;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**

@@ -199,6 +199,17 @@ build when the drawing and the measurement disagree.
   asset is badged on screen rather than quietly folded in.
 - **The registry is a subset.** A map drawn from four of seven sources is still
   worth reading, but only because it names the three that did not answer.
+- **ETH is ETH whatever receipt it is held as.** stETH, wstETH, weETH, rsETH,
+  osETH and the rest of the family are counted as the charted asset, each at
+  its own price against spot, so a staking loop reads as flat rather than as a
+  short that drowns at the first pump. Spot itself is what the deployments
+  report, agreed by median, not a number typed into the page.
+- **What the schema cannot explain is set aside, not drawn.** A position that
+  is open on-chain but under water by the schema's own liquidation thresholds
+  is being held up by something the schema does not carry, an efficiency mode
+  almost always. Flooding the map with a liquidation that is not happening
+  would be a lie, so that deployment is excluded from the terrain and named in
+  the feed with its computed health, and the survey says so.
 - **The reference book is a fixture.** It loads before any key is set so the
   map works out of the box. A surveyed address is live data, and the feed shows
   the block height it was read at.
@@ -232,7 +243,7 @@ registry row.
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
-| `npm test` | the full suite, 150 tests |
+| `npm test` | the full suite, 154 tests |
 | `npm run gate` | measure the terrain and fail on a flat map |
 | `npm run typecheck` | types |
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
@@ -241,6 +252,16 @@ registry row.
 
 Query parameters: `?sources=id,id` restricts the registry, so the difference
 one schema makes is reproducible by anyone.
+
+A live survey runs at [scree.hacklabs.in](https://scree.hacklabs.in). Two
+public addresses that borrow on more than one deployment, if you want ground
+with borders before connecting your own wallet:
+
+- `0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4`: Aave v3 on mainnet, Aave v3 on
+  Avalanche and Spark, three territories along the price axis with two folds
+  and a plateau.
+- `0x7df25ed19086f00e0539c7c9a2a6234e0689905e`: Aave v3 on mainnet and Compound
+  v3 on mainnet and Arbitrum, one fold above spot.
 
 ## Layout
 
