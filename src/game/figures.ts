@@ -17,10 +17,10 @@ export const SHEET = {
 } as const;
 
 /** Particle motes and living parts, frames of the fx sheet. */
-export const FX = { bubble: 0, droplet: 1, spark: 2, smoke: 3, cog: 4, orb: 5, glow: 6, window: 7, staff: 8 } as const;
+export const FX = { bubble: 0, droplet: 1, spark: 2, smoke: 3, cog: 4, orb: 5, glow: 6, window: 7, staff: 8, peg: 9 } as const;
 
-/** The surveyor sheet: 4 frames per row, rows in this order. */
-export const SURVEYOR = { frameWidth: 16, frameHeight: 18, rows: ["idle", "walk_down", "walk_up", "walk_left", "walk_right"] as const };
+/** The surveyor sheet: 32×40 frames, 8 per row, rows in this order. */
+export const SURVEYOR = { frameWidth: 32, frameHeight: 40, perRow: 8, rows: ["idle", "walk_down", "walk_up", "walk_left", "walk_right"] as const };
 
 /** The monsters sheet: 12 frames per monster, swim 0-3, dive 4-7, surface 8-11. */
 export const MONSTERS = {

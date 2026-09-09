@@ -36,7 +36,7 @@ export interface WorldData {
 const MOTE_KEY = "scree-mote";
 const SCALE = LAYOUT.scale;
 const TILE_PX = TILE * SCALE;
-const WALK_SPEED = 110 * SCALE;
+const WALK_SPEED = 120 * SCALE;
 /** The scale strip under the map, in world pixels: room for the camera to hold the surveyor above the edge. */
 export const AXIS_H = TILE_PX * 6;
 
@@ -51,11 +51,13 @@ export const DEPTH = {
   axis: 5,
   terrain: 10,
   lines: 14,
-  ground: 20, // + y-sort, up to 24
+  ground: 20, // + y-sort, up to 24: clutter, seats, leviathans and the surveyor alike
   particles: 25,
   scouts: 28,
-  surveyor: 30,
 } as const;
+
+/** Camera zoom for a closer look at a point of interest. */
+const POI_ZOOM = { seat: 1.25, surveyor: 1.5 } as const;
 
 /** A holdfast's place in the world, for the interface to hang a banner on and for the surveyor to be greeted at. */
 export interface Anchor {
@@ -105,6 +107,7 @@ export class WorldScene extends Phaser.Scene {
   private boundaryLines!: Phaser.GameObjects.Graphics;
 
   private surveyor!: Surveyor;
+  private home = { x: 0, y: 0 };
   private monsters: SeaMonster[] = [];
   private stirred = new Set<SeaMonster>();
   private anchors: Anchor[] = [];
@@ -342,6 +345,11 @@ export class WorldScene extends Phaser.Scene {
       };
       hit.on("pointerover", () => hover(true));
       hit.on("pointerout", () => hover(false));
+      hit.on("pointerdown", () => {
+        const gate = this.worldToFractions(left + (w * TILE_PX) / 2, bottom + TILE_PX * 0.8);
+        this.walkTo(gate.fx, gate.fy);
+        this.lookCloser(POI_ZOOM.seat);
+      });
 
       this.anchors.push({
         x: left + (w * TILE_PX) / 2,
@@ -366,13 +374,36 @@ export class WorldScene extends Phaser.Scene {
 
   /* ── the surveyor ─────────────────────────────────────────────────── */
 
+  /**
+   * The surveyor starts at today's price, on the bottom row, beside a survey
+   * peg that marks the spot. Clicking him, or the peg, brings the camera in.
+   */
   private placeSurveyor() {
     const { grid } = this.opts;
     const x = grid.today.fx * this.worldW;
     const y = this.worldH - SCALE * 4;
     const tx = Math.floor(x / TILE_PX);
-    for (let dx = -1; dx <= 1; dx++) for (let dy = 0; dy <= 1; dy++) this.blocked.add(this.key(tx + dx, grid.rows - 1 - dy));
-    this.surveyor = new Surveyor(this, x, y, DEPTH.surveyor);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = 0; dy <= 2; dy++) this.blocked.add(this.key(tx + dx, grid.rows - 1 - dy));
+    this.home = { x, y };
+    const peg = this.add.image(x + SCALE * 14, y, SHEET.fx, FX.peg).setOrigin(0.5, 1).setScale(SCALE).setDepth(this.ySort(y) - 0.002);
+    peg.setInteractive({ useHandCursor: true });
+    peg.on("pointerdown", () => {
+      const back = this.worldToFractions(this.home.x, this.home.y);
+      this.walkTo(back.fx, back.fy);
+      this.lookCloser(POI_ZOOM.surveyor);
+    });
+    this.surveyor = new Surveyor(this, x, y);
+    this.surveyor.setGroundDepth(this.ySort(y) + 0.002);
+    this.surveyor.on("pointerdown", () => this.lookCloser(POI_ZOOM.surveyor));
+  }
+
+  /** Tween the camera in on the surveyor, then redraw what is drawn in screen pixels. */
+  private lookCloser(zoom: number) {
+    const cam = this.cameras.main;
+    cam.zoomTo(Math.max(zoom, this.fitZoom()), 1000, "Sine.easeInOut", true, (_c: Phaser.Cameras.Scene2D.Camera, progress: number) => {
+      cam.setFollowOffset(0, this.followOffset());
+      if (progress === 1) this.drawLines();
+    });
   }
 
   /* ── leviathans ───────────────────────────────────────────────────── */
@@ -474,7 +505,7 @@ export class WorldScene extends Phaser.Scene {
     fit();
     this.scale.on("resize", fit, this);
     cam.centerOn(this.surveyor.x, this.surveyor.y - this.followOffset());
-    cam.startFollow(this.surveyor, true, 0.08, 0.08, 0, this.followOffset());
+    cam.startFollow(this.surveyor, true, 0.05, 0.05, 0, this.followOffset());
   }
 
   private inViewport(pointer: Phaser.Input.Pointer): boolean {
@@ -494,8 +525,20 @@ export class WorldScene extends Phaser.Scene {
       this.events.emit(EV.zoneHover, this.opts.readAt(fx, fy));
     });
 
-    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      if (pointer.rightButtonDown() || !this.inViewport(pointer) || this.hoverCitadel || this.hoverMonster) return;
+    let lastDown = 0;
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+      // A click on a seat, a leviathan, the peg or the surveyor is theirs; the
+      // list of what is under the pointer is exact where a remembered hover
+      // would be stale after the camera has moved under a still pointer.
+      if (pointer.rightButtonDown() || !this.inViewport(pointer) || over.length > 0) return;
+      // A double click on the ground pulls the camera back out to the whole survey.
+      const now = this.time.now;
+      if (now - lastDown < 320) {
+        lastDown = 0;
+        this.lookCloser(this.fitZoom());
+        return;
+      }
+      lastDown = now;
       const p = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       const { fx, fy } = this.worldToFractions(p.x, p.y);
       this.walkTo(fx, fy);
@@ -515,7 +558,9 @@ export class WorldScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => canvas.removeEventListener("mouseleave", leave));
   }
 
+  /** Strict y-sorting: the surveyor's depth is his feet, every frame, so he passes behind what stands lower on screen. */
   override update() {
+    this.surveyor.setGroundDepth(this.ySort(this.surveyor.y) + 0.002);
     this.watchLeviathans();
   }
 

@@ -71,7 +71,12 @@ clear of the map's edge, built from a blueprint for its protocol's family
 that turns, an orb that floats, flags that wave. A banner floats over each,
 naming the deployment and the share of the ground it binds. The argmin borders are
 faults: a chain of crags over ley that breathes, denser and studded with
-ruins on the pass where long meets short. The deep water has its leviathans
+ruins on the pass where long meets short. The surveyor is a 32×40 figure drawn by the bake script from a pose: an idle
+that breathes, blinks and taps the staff, eight-frame walks in four directions.
+He is y-sorted with everything on the ground from his feet every frame, his
+shadow a hair under him, and a click on a seat, on the peg at today's price or
+on him brings the camera in; a double click on the ground takes it back out.
+The deep water has its leviathans
 (`src/game/SeaMonster.ts`), physics sprites that patrol their basin by tween,
 trail bubbles, dive and surface on their own clock, and warn about slippage,
 cascades and oracle drift when you hover them.

@@ -63,56 +63,263 @@ const P = {
 
 /* ── the surveyor ────────────────────────────────────────────────────── */
 
+type View = "front" | "back" | "side";
+
+interface Pose {
+  /** Whole-body rise, negative is up. */
+  bob: number;
+  /** Feet: for front and back views, down is forward; for the side view, right is forward. */
+  leftFoot: number;
+  rightFoot: number;
+  /** Arm swing, -1..1: front/back views swing up and down, the side view swings fore and aft. */
+  swing: number;
+  /** Hem sway in pixels. */
+  sway: number;
+  /** Breathing: chest and head rise by this much. */
+  breathe: number;
+  blink: boolean;
+  /** The staff lifted off the ground by this much. */
+  staffLift: number;
+  /** Dust where the staff just struck. */
+  dust: boolean;
+}
+
+const REST: Pose = { bob: 0, leftFoot: 0, rightFoot: 0, swing: 0, sway: 0, breathe: 0, blink: false, staffLift: 0, dust: false };
+
+const S = {
+  hat: rgb(122, 60, 158),
+  hatLight: rgb(178, 96, 210),
+  hatDark: rgb(78, 34, 104),
+  band: rgb(176, 141, 74),
+  skin: rgb(226, 194, 132),
+  skinShade: rgb(196, 156, 100),
+  eye: rgb(28, 22, 40),
+  beard: rgb(206, 208, 216),
+  beardShade: rgb(150, 152, 168),
+  robe: rgb(108, 54, 140),
+  robeLight: rgb(146, 84, 178),
+  robeDark: rgb(70, 32, 94),
+  belt: rgb(176, 141, 74),
+  buckle: rgb(60, 44, 20),
+  boot: rgb(58, 40, 30),
+  bootLight: rgb(92, 66, 48),
+  staff: rgb(118, 84, 52),
+  staffLight: rgb(160, 120, 78),
+  outline: rgb(26, 20, 34),
+  dust: rgb(200, 190, 170, 170),
+};
+
+function span(p: Pix, x0: number, x1: number, y: number, c: RGBA): void {
+  for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) p.put(x, y, c);
+}
+
+function disc(p: Pix, cx: number, cy: number, rx: number, ry: number, c: RGBA): void {
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
+    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++)
+      if (((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1) p.put(x, y, c);
+}
+
+/** A one-pixel dark outline around everything opaque, the pixel-art silhouette. */
+function outline(p: Pix, c: RGBA): void {
+  const src = p.clone();
+  for (let y = 0; y < p.height; y++)
+    for (let x = 0; x < p.width; x++) {
+      if (src.get(x, y)[3] > 0) continue;
+      const near = src.get(x - 1, y)[3] > 0 || src.get(x + 1, y)[3] > 0 || src.get(x, y - 1)[3] > 0 || src.get(x, y + 1)[3] > 0;
+      if (near) p.set(x, y, c);
+    }
+}
+
 /**
- * Tiny Dungeon's wizard is one 16×16 frame. The walk cycle is derived: the
- * body bobs, the hem sways, one hand lifts per stride. The back view
- * recolours the face into robe; the side views drop the far eye.
+ * The surveyor, 32×40, feet on the bottom row, drawn from a pose. One drawing
+ * routine per view; the left walk is the right walk mirrored.
+ */
+function drawSurveyor(view: View, pose: Pose): Pix {
+  const p = new Pix(32, 40);
+  const b = pose.bob;
+  const br = pose.breathe;
+  const ground = 38;
+
+  // ── feet and hem ──
+  const hemY = ground - 2 + b;
+  if (view === "side") {
+    // Profile: boots step fore and aft.
+    const back = 13 - pose.leftFoot;
+    const fore = 17 + pose.rightFoot;
+    p.fill(back, ground - 2, 4, 3, S.boot);
+    p.fill(fore, ground - 2, 5, 3, S.boot);
+    p.fill(fore, ground - 2, 5, 1, S.bootLight);
+  } else {
+    const lx = 11 + (view === "back" ? 1 : 0);
+    const rx = 17 + (view === "back" ? 1 : 0);
+    p.fill(lx, ground - 2 + Math.max(0, pose.leftFoot), 4, 3 - Math.max(0, pose.leftFoot), S.boot);
+    p.fill(rx, ground - 2 + Math.max(0, pose.rightFoot), 4, 3 - Math.max(0, pose.rightFoot), S.boot);
+    if (pose.leftFoot < 0) p.fill(lx, ground - 2, 4, 1, S.bootLight);
+    if (pose.rightFoot < 0) p.fill(rx, ground - 2, 4, 1, S.bootLight);
+  }
+
+  // ── robe ──
+  const shoulderY = 22 + b - br;
+  const robeTop = shoulderY;
+  for (let y = robeTop; y <= hemY; y++) {
+    const t = (y - robeTop) / (hemY - robeTop);
+    const half = view === "side" ? 5 + t * 2 : 6 + t * 3;
+    const swayHere = Math.round(pose.sway * t);
+    const cx = 16 + swayHere;
+    span(p, Math.round(cx - half), Math.round(cx + half), y, S.robe);
+    // The fold of light down the front, and shade at the hem.
+    if (view === "front") span(p, cx - 1, cx + 1, y, S.robeLight);
+    if (view === "back") p.put(cx, y, S.robeDark);
+    if (y >= hemY - 1) span(p, Math.round(cx - half), Math.round(cx + half), y, S.robeDark);
+  }
+  // Belt.
+  const beltY = robeTop + 7;
+  const beltHalf = view === "side" ? 5 : 7;
+  span(p, 16 - beltHalf, 16 + beltHalf, beltY, S.belt);
+  span(p, 16 - beltHalf, 16 + beltHalf, beltY + 1, mix(S.belt, S.robeDark, 0.5));
+  if (view === "front") p.fill(15, beltY, 2, 2, S.buckle);
+
+  // ── arms ──
+  const swingUp = Math.round(pose.swing * 2);
+  if (view === "side") {
+    // One arm, on the near side, swinging fore and aft; it carries the staff.
+    const ax = 18 + Math.round(pose.swing * 3);
+    p.fill(ax, shoulderY + 1, 3, 9, S.robeDark);
+    p.fill(ax, shoulderY + 9, 3, 3, S.skin);
+  } else {
+    const leftHandY = shoulderY + 9 - swingUp;
+    const rightHandY = shoulderY + 9 + swingUp;
+    p.fill(7, shoulderY + 1, 3, leftHandY - shoulderY - 1, S.robeDark);
+    p.fill(7, leftHandY, 3, 3, S.skin);
+    p.fill(22, shoulderY + 1, 3, rightHandY - shoulderY - 1, S.robeDark);
+    p.fill(22, rightHandY, 3, 3, S.skin);
+  }
+
+  // ── head ──
+  const headY = 13 + b - br;
+  if (view === "front" || view === "side") {
+    const fx0 = view === "side" ? 13 : 11;
+    const fx1 = view === "side" ? 21 : 21;
+    for (let y = headY; y < headY + 9; y++) {
+      const inset = y === headY || y === headY + 8 ? 1 : 0;
+      span(p, fx0 + inset, fx1 - inset, y, S.skin);
+    }
+    p.put(fx1, headY + 4, S.skinShade);
+    // Eyes and nose.
+    if (view === "front") {
+      if (pose.blink) {
+        span(p, 13, 14, headY + 5, S.eye);
+        span(p, 18, 19, headY + 5, S.eye);
+      } else {
+        p.fill(13, headY + 4, 2, 2, S.eye);
+        p.fill(18, headY + 4, 2, 2, S.eye);
+      }
+      p.put(16, headY + 6, S.skinShade);
+    } else {
+      if (pose.blink) span(p, 19, 20, headY + 5, S.eye);
+      else p.fill(19, headY + 4, 2, 2, S.eye);
+      p.put(21, headY + 6, S.skinShade);
+    }
+    // Beard: a long one, strands drawn in the shade colour.
+    const beardTop = headY + 7;
+    const beardX0 = view === "side" ? 14 : 11;
+    const beardX1 = view === "side" ? 21 : 21;
+    for (let y = beardTop; y < beardTop + 12; y++) {
+      const t = (y - beardTop) / 12;
+      const shrink = Math.round(t * (view === "side" ? 3 : 4));
+      span(p, beardX0 + shrink, beardX1 - shrink, y, S.beard);
+      for (let x = beardX0 + shrink; x <= beardX1 - shrink; x += 3) if ((x + y) % 2 === 0) p.put(x, y, S.beardShade);
+    }
+    span(p, view === "side" ? 15 : 12, view === "side" ? 21 : 20, beardTop, S.beardShade); // moustache
+  } else {
+    // The back of the head: the hood, with its seam.
+    for (let y = headY; y < headY + 10; y++) span(p, 11, 21, y, S.robe);
+    for (let y = headY; y < headY + 10; y++) p.put(16, y, S.robeDark);
+  }
+
+  // ── hat ──
+  const brimY = headY - 1;
+  const tipX = view === "side" ? 7 : 19;
+  const tipY = brimY - 11;
+  for (let y = tipY; y <= brimY; y++) {
+    const t = (y - tipY) / (brimY - tipY);
+    const half = 0.5 + t * 6.5;
+    const cx = tipX + (16 - tipX) * t;
+    span(p, Math.round(cx - half), Math.round(cx + half), y, S.hat);
+    span(p, Math.round(cx - half), Math.round(cx - half + Math.max(0, half * 0.6)), y, S.hatLight);
+    p.put(Math.round(cx + half), y, S.hatDark);
+  }
+  // Brim.
+  const brimHalf = view === "side" ? 8 : 10;
+  span(p, 16 - brimHalf + 1, 16 + brimHalf - 1, brimY, S.hatDark);
+  span(p, 16 - brimHalf, 16 + brimHalf, brimY + 1, S.hat);
+  span(p, 16 - brimHalf + 1, 16 + brimHalf - 1, brimY + 2, S.hatDark);
+  span(p, 16 - brimHalf + 2, 16 + brimHalf - 2, brimY - 1, S.band);
+
+  // ── staff ──
+  const staffX = view === "side" ? 27 : view === "back" ? 5 : 26;
+  const lift = pose.staffLift;
+  const staffTop = 3 - lift;
+  const staffBottom = ground + 1 - lift;
+  for (let y = staffTop; y <= staffBottom; y++) {
+    p.put(staffX, y, S.staff);
+    p.put(staffX + 1, y, mix(S.staff, S.outline, 0.4));
+    if (y % 3 === 0) p.put(staffX, y, S.staffLight);
+  }
+  span(p, staffX - 2, staffX + 3, staffTop + 5, S.band);
+  disc(p, staffX + 1, staffTop + 1.5, 2.6, 2.6, P.leyDeep);
+  disc(p, staffX + 1, staffTop + 1.5, 1.7, 1.7, P.ley);
+  p.put(staffX, staffTop, P.leyBright);
+
+  outline(p, S.outline);
+
+  if (pose.dust) {
+    for (const [dx, dy] of [[-2, 0], [3, 0], [-3, -1], [4, -1], [0, 1]] as const) p.put(staffX + 1 + dx, ground + 1 + dy, S.dust);
+  }
+  return p;
+}
+
+/**
+ * Forty frames: an idle that breathes, blinks and taps the staff, and
+ * eight-frame walks in four directions, the left one mirrored from the right.
  */
 function bakeSurveyor(): Pix {
-  const base = frame16(dungeon, 84);
-  const skin = base.get(5, 8);
-  const eye = base.get(6, 8);
-  const beard = base.get(7, 9);
-  const beardShade = base.get(4, 8);
-  const robe = base.get(4, 10);
-  const robeLight = base.get(4, 5);
-  const isFace = (c: RGBA) => same(c, skin) || same(c, eye) || same(c, beard) || same(c, beardShade);
-
-  const front = base;
-  const back = base.map((c, x, y) => {
-    if (y >= 6 && x >= 4 && x <= 11 && isFace(c)) return x === 7 || x === 8 ? (y % 3 === 0 ? robeLight : robe) : robe;
-    return c;
-  });
-  const right = base.map((c, x, y) => (y === 8 && (x === 6 || x === 7) && same(c, eye) ? skin : c));
-  const blink = base.map((c, x, y) => (y === 8 && same(c, eye) ? (x === 6 || x === 10 ? beardShade : skin) : c));
-
-  const pose = (view: Pix, k: number, flip = false): Pix => {
-    const v = view.clone();
-    if (k === 0) {
-      v.moveBlock(2, 11, 2, 2, 0, -1, robe);
-      for (let y = 13; y < 16; y++) v.moveBlock(0, y, 16, 1, 1, 0, CLEAR);
-    } else if (k === 2) {
-      v.moveBlock(12, 11, 2, 2, 0, -1, robe);
-      for (let y = 13; y < 16; y++) v.moveBlock(0, y, 16, 1, -1, 0, CLEAR);
-    }
-    const f = new Pix(16, 18);
-    f.blit(v, 0, k % 2 === 1 ? 1 : 2, { flipX: flip });
-    return f;
+  const frames: Pix[] = [];
+  const idle: Pose[] = Array.from({ length: 8 }, (_, f) => ({
+    ...REST,
+    breathe: [0, 0, 1, 1, 1, 0, 0, 0][f]!,
+    blink: f === 6,
+    staffLift: [0, 0, 0, 0, 3, 1, 0, 0][f]!,
+    dust: f === 6,
+    swing: [0, 0, 0.3, 0.3, 0.3, 0, 0, 0][f]!,
+  }));
+  const walk = (f: number): Pose => {
+    const phase = (f / 8) * Math.PI * 2;
+    const s = Math.sin(phase);
+    return {
+      ...REST,
+      bob: [0, -1, -2, -1, 0, -1, -2, -1][f]!,
+      leftFoot: Math.round(s * 2),
+      rightFoot: Math.round(-s * 2),
+      swing: s,
+      sway: Math.round(Math.cos(phase) * 1.4),
+      breathe: 0,
+      blink: false,
+      staffLift: Math.max(0, Math.round(s * 2)),
+      dust: false,
+    };
   };
-  const still = (view: Pix): Pix => {
-    const f = new Pix(16, 18);
-    f.blit(view, 0, 2);
-    return f;
-  };
-
-  const frames: Pix[] = [
-    still(front), still(front), still(blink), still(front),   // idle
-    ...[0, 1, 2, 3].map((k) => pose(front, k)),               // walk_down
-    ...[0, 1, 2, 3].map((k) => pose(back, k)),                // walk_up
-    ...[0, 1, 2, 3].map((k) => pose(right, k, true)),         // walk_left
-    ...[0, 1, 2, 3].map((k) => pose(right, k)),               // walk_right
-  ];
-  return sheet(frames, 4, 16, 18);
+  for (const pose of idle) frames.push(drawSurveyor("front", pose));
+  for (let f = 0; f < 8; f++) frames.push(drawSurveyor("front", walk(f)));
+  for (let f = 0; f < 8; f++) frames.push(drawSurveyor("back", walk(f)));
+  for (let f = 0; f < 8; f++) {
+    const right = drawSurveyor("side", walk(f));
+    const left = new Pix(32, 40);
+    left.blit(right, 0, 0, { flipX: true });
+    frames.push(left);
+  }
+  for (let f = 0; f < 8; f++) frames.push(drawSurveyor("side", walk(f)));
+  return sheet(frames, 8, 32, 40);
 }
 
 /* ── sea monsters ────────────────────────────────────────────────────── */
@@ -370,7 +577,18 @@ function bakeFx(): Pix {
   circle(staff, 8, 2.5, 1.4, P.ley);
   staff.put(7, 1, P.leyBright);
 
-  return sheet([bubble, droplet, spark, smoke, cog, orb, glow, window, staff], 9, 16, 16);
+  // The survey peg at today's price: a brass post with a peril pennant.
+  const peg = new Pix(16, 16);
+  for (let x = 3; x < 13; x++) if (hash(x, 1, 95) > 0.35) peg.put(x, 14, P.shadow);
+  peg.fill(7, 4, 2, 10, P.brass);
+  peg.fill(7, 4, 1, 10, mix(P.brass, P.vellumLit, 0.5));
+  peg.fill(6, 13, 4, 1, mix(P.brass, P.shellEdge, 0.5));
+  peg.fill(9, 4, 5, 1, hex(0xe2603a));
+  peg.fill(9, 5, 4, 1, hex(0xe2603a));
+  peg.fill(9, 6, 2, 1, hex(0xe2603a));
+  peg.put(7, 3, P.leyBright);
+
+  return sheet([bubble, droplet, spark, smoke, cog, orb, glow, window, staff, peg], 10, 16, 16);
 }
 
 /* ── the interface ───────────────────────────────────────────────────── */
