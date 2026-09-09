@@ -163,6 +163,61 @@ liquidation prices, and the crest is `sqrt(upper/lower) − 1`. That closed form
 is in `src/core/bracket.ts` and it reports when it does *not* hold, because an
 affine leg shifts the ridge off the mean.
 
+## Paying for a survey
+
+The reading the map draws is also a thing an agent can buy. `/api/survey` is
+the same survey as `/api/terrain`, gated by [x402](https://github.com/x402-foundation/x402)
+on Hedera and metered by what it asks for.
+
+1. An agent that has never seen the service reads `/api/survey/manifest`: the
+   endpoint, the rail (x402 `exact` scheme, HBAR on `hedera:testnet`, the
+   service account it pays), the price schedule with a worked example, which
+   deployments can be asked, and the topic where receipts are written.
+2. It requests the survey with no payment and gets `402 Payment Required`.
+   The `PAYMENT-REQUIRED` header names the exact price for that request:
+   a base charge plus a charge per verified deployment asked, so a survey of
+   two sources costs less than a survey of seven, and nothing is charged for a
+   deployment the registry cannot vouch for, because it is never asked.
+3. It signs a Hedera transfer for that amount with its own ECDSA key and
+   retries with the signed transaction in the `PAYMENT-SIGNATURE` header.
+4. The service asks the [Blocky402](https://blocky402.com/) facilitator to
+   verify the payment, runs the survey, and only then has the facilitator
+   settle the transfer on Hedera. If the survey fails, the payment is cancelled
+   rather than settled. The settlement transaction id comes back in the
+   response headers.
+5. After settlement the service writes one message to a Hedera Consensus
+   Service topic: what was asked, what was paid and by whom, the settlement
+   transaction, and the SHA-256 of the body exactly as it was sent. A buyer can
+   hash what it received and find that digest on the public topic.
+
+The buyer in this repository is `scripts/scout.ts`, an agent with a budget in
+HBAR. It discovers the service from the manifest, refuses any request that
+would exceed its budget or a price above the quote it expected, pays, prints
+the reading with the settlement link, and then reads the topic back until it
+finds the receipt for its own transaction and confirms the digest matches.
+
+```bash
+npm run scout -- --address 0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4 --budget 0.5 --service https://scree.hacklabs.in
+```
+
+```
+price     0.01 + 0.005 × 7 sources = 0.045 HBAR per survey
+== 0xb7b7…6fd4
+  paid      0.045 HBAR for 7 sources, in 4.6s
+  settled   0.0.7162784@1788961026.599308167
+  spot      $2,509   health 1.472   shape LONG-ONLY
+  receipt   topic 0.0.10439715 #1, digest matches what I received
+```
+
+Pass `--every 10` to re-survey on a schedule until the budget is spent. The
+pieces: `src/x402/pricing.ts` (the schedule), `src/x402/service.ts` (the gate:
+resource server, facilitator client, receipt hook), `src/app/api/survey/`
+(the paid route and the manifest), `src/hedera/receipts.ts` (the topic), and
+`scripts/new-topic.ts` to create a topic once per deployment. The facilitator
+is pinned to Blocky402 for both networks; the reference implementation's
+testnet default is a different facilitator, and that is easy to inherit by
+accident.
+
 ## The geometry gate
 
 It is easy to write a renderer that draws convincing creases over terrain that
@@ -243,10 +298,12 @@ registry row.
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
-| `npm test` | the full suite, 154 tests |
+| `npm test` | the full suite, 157 tests |
 | `npm run gate` | measure the terrain and fail on a flat map |
 | `npm run typecheck` | types |
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
+| `npm run hedera:topic` | create the HCS topic that receives survey receipts |
+| `npm run scout -- --address 0x…` | an agent that discovers, pays for and verifies a survey |
 | `npm run bake:sprites` | regenerate the baked sheets under `public/assets/scree/` |
 | `npm run build` | production build |
 
@@ -270,11 +327,14 @@ with borders before connecting your own wallet:
 | `src/core` | the kernel, liquidation prices, the bracket, wallet shape, fixtures |
 | `src/graph` | the one query, the gateway fan-out, normalisation, reduction to baskets |
 | `src/registry` | the deployments, all one schema, and their verification |
+| `src/survey` | the survey itself, shared by the free route and the paid one |
+| `src/x402` | the price schedule and the payment gate |
+| `src/hedera` | receipts on the Consensus Service |
 | `src/field` | the raster and its features |
 | `src/render` | contours, hachures and the survey plate |
 | `src/sim` | the price walks the scouts follow |
 | `src/game` | terrain, tileset, clutter, holdfasts, the three scenes, the surveyor and the leviathans |
-| `scripts` | the geometry gate, the subgraph verifier, the sprite bakery |
+| `scripts` | the geometry gate, the subgraph verifier, the sprite bakery, the topic maker, the scout |
 
 ## What it will never ask for
 
