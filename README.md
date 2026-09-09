@@ -3,87 +3,136 @@
 **A survey map of how you get liquidated.**
 
 Every lending app reduces your risk to a single number: *"liquidated at $3,434."*
-That number is a scalar standing in for a field, and it is most wrong exactly
-when it matters. Scree renders the field.
+That number is a scalar standing in for a field. It is computed as if the rest
+of the market froze and as if time never passed, and it is most wrong exactly
+when it matters. Scree draws the field the number stands in for, and draws it
+as a place you can walk: an island whose height is your health, whose sea level
+is liquidation, and whose borders are the lines no dashboard can show, where one
+protocol stops being the thing that kills you and another takes over.
 
-## The map
+## One query, seven deployments
 
-| Axis | Meaning |
-|---|---|
-| left to right | price of your primary collateral, -60% to +60% of spot, log scale |
-| bottom to top | **dwell** — how long price has continuously stayed at or below that level, 0 to 30 days |
-| elevation | health factor minus one, minimised across every lending deployment you borrow from |
-| sea level | liquidation |
+Scree has no per-protocol code. It asks Aave v3, Compound v3 and Spark, on
+mainnet, Arbitrum, Base and Optimism, the same GraphQL query, because all
+seven deployments publish the Messari Standardized Lending schema. The query
+(`src/graph/query.ts`) names no protocol. Adding a deployment costs one row in
+`src/registry/deployments.ts`; there is no adapter to write.
 
-High ground is safe. The coastline is where you die. The dashed line is a
-**fold**: the price at which the deployment closest to killing you hands over to
-a different one. No dashboard shows you that line, because a dashboard has one
-row per protocol and nowhere to put the boundary between them.
+That is not a convenience, it is where the map's structure comes from. The
+seven answers arrive in one shape, so they can be minimised against each
+other at every point of price × dwell. The lowest health wins, and which one
+won is the tile's owner. The **territories** on the map are that argmin
+partition; their borders are the **folds**, the points where the deployment
+closest to liquidating you hands over to a different one. A single deployment
+cannot have a fold. Seven standardized ones do.
+
+You can watch the standard do this work. `?sources=aave-v3-arbitrum` renders
+the map from one deployment: a ramp, one coast, no borders, and the feed says
+`LONG-ONLY`. Drop the parameter and the same address renders from all seven: a
+ridge, a pass, fault lines and three holdfasts. Nothing in the code changed
+between the two pictures; only how many standardized answers were minimised.
+
+The data path, in `src/graph/`:
+
+- `fanOut` sends the query to every deployment at once through the gateway,
+  with the key kept server-side (`/api/terrain`). A deployment that is down,
+  rate-limited or has never heard of the address is recorded as failed and the
+  scan continues; the response names `healthy`, `failed` and a block height per
+  deployment, so every number on the map can cite its source and its age.
+- `normalize` turns the schema's string numbers into numbers and its
+  percentage ratios into ratios. `liquidationThreshold` arrives as `82.5`, not
+  `0.825`, which is the single most common way to get a liquidation price
+  wrong by a factor of a hundred; the guard refuses to divide twice.
+- `reduce` folds the legs into one basket per deployment: charted-asset
+  collateral and debt, everything else held constant, and the rates.
+
+## On screen
+
+**The door.** A landing scene: the same terrain the survey draws, drifting
+under a dark veil, with a stone console holding one real text input for an
+address and two brass buttons, Begin survey and Connect wallet. The reference
+book opens first; a wallet's own book replaces it when the query returns.
+
+**The island.** Eighty by fifty-two tiles. Deep water, a shallow shelf and an
+abyss on both sides; sand coasts with coves; lowland grass with deciduous
+trees; midland pine forest and rock; a broad range with a snow crest. The sea
+rolls through eight frames and foam breaks on the shore. A ruled price scale
+runs under the map.
+
+**Holdfasts.** One seat per deployment, on the highest ground its territory
+rules: Aave's battlemented castle, Spark's roofed tower with a turning gear
+and a smoking chimney, Compound's red-roofed manor with windows that glow. A
+banner floats over each with the deployment and its share of the ground. Walk
+up to one and it greets you with its liquidation threshold.
+
+**Faults.** The territory borders are chains of crags over a ley line that
+breathes, denser and studded with ruins on the pass, where a long book meets a
+short one, because that crest is the only place the ground can be crossed in
+both directions.
+
+**The surveyor.** A figure at today's price with a levelling staff. Click
+anywhere and he walks there; where he stands is a scenario, and the log records
+the reading. Walk into the sea and he drowns, and the log names which
+deployment took the book. Click a seat, the peg at today's price or the surveyor
+himself and the camera comes in; double-click the ground and it goes back out.
+
+**Leviathans.** Three sea monsters patrol the deep water, dive and surface,
+and warn on hover: slippage, cascading liquidation, oracle drift, each with the
+depth of the water it swims in and whose water it is.
+
+**The reading panel.** Hover anywhere and the box in the corner names the
+deployment that owns the ground, the price, the dwell, the health factor and
+the exact liquidation threshold at that dwell. Beside it, the terrace-depth
+graph: the crash edge against dwell, and where a proposed lift in health would
+move it.
+
+**Scouts.** Two hundred simulated thirty-day price walks set out from where
+the surveyor stands. The ones that cross the shoreline drown where they fall;
+the log reports how many came home.
+
+**The plate.** The original hachured contour map, one click away, for readers
+who want the survey without the world.
 
 ## How the ground is drawn
 
-The map is a Phaser 4 game in three scenes. `LandingScene` is the door: the
-same ground the survey draws, drifted across by its own camera under a dark
-veil, with the title and a stone console holding one real text input and two
-brass buttons. Begin, and it fades into the world, handing the page the
-address to load and the world its data; a book that arrives later restarts the
-world on it. Behind the door, the survey runs in two scenes. `WorldScene` (`src/game/WorldScene.ts`)
-owns the camera and everything standing on the ground; `UIScene` is launched
-over it and owns the instrument: the top bar, the bezel, the title plate, the
-live feed, the log, the reading panel with its terrace-depth graph, and the
-pop-ups, every box a nine-slice of baked pixel-art stock. The world raises events; the interface
-listens. Neither scene does arithmetic — the page hands them a terrain grid and
-a `readAt` function built from the kernel.
+The map is a Phaser 4 game in three scenes. `LandingScene` is the door.
+`WorldScene` (`src/game/WorldScene.ts`) owns the camera and everything
+standing on the ground; `UIScene` is launched over it and owns the instrument:
+the top bar, the bezel, the live feed, the log, the reading panel, the banners
+and the pop-ups, every box a nine-slice of baked pixel-art stock. The world
+raises events; the interface listens. Neither scene does arithmetic; the page
+hands them a terrain grid and a `readAt` function built from the kernel, and a
+book that arrives later restarts the world on it.
 
-The grid comes from `src/game/terrain.ts`. Elevation is sampled at tile corners
-and banded into seven biomes: deep water, the shallow shelf, coast, lowland
-grass, midland forest, mountain and snow. Each tile records the lowest band
-among its four corners and a 4-bit mask of the corners that rise above it, so
-every tile shows exactly one transition and neighbouring tiles agree along the
-corner they share. `src/game/tileset.ts` paints the tileset from colours
-sampled off the Kenney sheet: eight rolling frames per water band, four frames
-of foam on the shore, a lit lip and a two-pixel cliff on every land step.
-
-The survey draws its own window (`surveyWindow`): a landscape-shaped field
-in which the survivable bracket takes about two thirds of the width, with real
-sea on both sides. Under the map runs the survey's paper margin, a ruled price
-scale, which also gives the camera room to hold the surveyor above the edge.
+The grid comes from `src/game/terrain.ts`. The kernel is evaluated at tile
+corners and banded into seven biomes. Each tile records the lowest band among
+its four corners and a 4-bit mask of the corners that rise above it, so every
+tile shows exactly one transition and neighbouring tiles agree along the
+corner they share. `src/game/tileset.ts` paints the tileset at load from
+colours sampled off the Kenney sheet: eight rolling frames per water band,
+four frames of foam on the shore, a lit lip and a cliff face on every land
+step. The shoreline is traced by marching squares through the drawn heights;
+borders are the argmin edges; seats are the highest ground each territory owns,
+clear of the map's edge.
 
 Health depends on price far more than on dwell, so the raw field is a set of
 vertical stripes. Two things bend it into a landscape without moving sea level
-(`src/game/terrain.ts`, `RELIEF`): a domain warp lets the price axis wander
-with map height, and the same warp is applied to every reading, so what the
-map shows at a point is what the book says there; and simplex noise on the
-height fades to nothing at the shore and is clamped so it never crosses it.
-Coves, headlands, plateaus and ridges are relief; the liquidation line is
-exact. The water is banded by fraction of the window's floor into a shelf, the
-deep and the abyss, so every book has all three however deep its sea goes; the
-land by fraction of its ceiling, with rock from the forest line to the snow
-line so the ridge reads as a range.
+(`RELIEF` in `terrain.ts`): a domain warp lets the price axis wander with map
+height, and the same warp is applied to every reading, so what the map shows at
+a point is what the book says there; and simplex noise on the height fades to
+nothing at the shore and is clamped so it never crosses it. The map and the
+arithmetic were checked to agree, wet or dry, on every one of the 4,160 tiles.
+Water is banded by fraction of the window's floor into shelf, deep and abyss,
+so every book has all three however deep its sea goes; land by fraction of its
+ceiling, with rock from the forest line to the snow line.
 
-Everything on the land is a rule of the tile under it. `src/game/clutter.ts`
-fills each biome from its own catalogue — driftwood on the coast, deciduous
-trees on the plains, dense pines and rock in the midlands, peaks, ruins and
-aether crystals on the heights — grouped by a slow noise into groves and
-fields. Each territory's holdfast is planned onto the highest ground it rules,
-clear of the map's edge, built from a blueprint for its protocol's family
-(`src/game/holdfasts.ts`), and given living parts: windows that glow, a gear
-that turns, an orb that floats, flags that wave. A banner floats over each,
-naming the deployment and the share of the ground it binds. The argmin borders are
-faults: a chain of crags over ley that breathes, denser and studded with
-ruins on the pass where long meets short. The surveyor is a 32×40 figure drawn by the bake script from a pose: an idle
-that breathes, blinks and taps the staff, eight-frame walks in four directions.
-He is y-sorted with everything on the ground from his feet every frame, his
-shadow a hair under him, and a click on a seat, on the peg at today's price or
-on him brings the camera in; a double click on the ground takes it back out.
-The deep water has its leviathans
-(`src/game/SeaMonster.ts`), physics sprites that patrol their basin by tween,
-trail bubbles, dive and surface on their own clock, and warn about slippage,
-cascades and oracle drift when you hover them.
-
-Depth is strict: water at 0, the paper margin at 5, terrain at 10, the lines
-above it, everything standing on the ground y-sorted inside 20–24, the
-surveyor at 30, the interface from 90 and its pop-ups at 100.
+Everything standing on the land is a rule of the tile under it
+(`src/game/clutter.ts`): driftwood on the coast, deciduous trees on the plains,
+dense pines and rock in the midlands, peaks, ruins and aether crystals on the
+heights, grouped by a slow noise into groves and fields. Depth is strict: water
+at 0, the paper margin at 5, terrain at 10, the lines above it, everything on
+the ground y-sorted inside 20 to 24, particles and scouts above that, the
+interface from 90 and its pop-ups at 100.
 
 ## Why the ground has shape
 
@@ -107,7 +156,7 @@ Which means:
   not there.
 - A book holding **both signs** has one position that kills you on the way down
   and another on the way up. Between them is a ridge, and the highest point on
-  it is the **pass** — the best health this book can reach at any price.
+  it is the **pass**, the best health this book can reach at any price.
 
 For two pure legs the ridge sits exactly at the geometric mean of the two
 liquidation prices, and the crest is `sqrt(upper/lower) − 1`. That closed form
@@ -142,11 +191,17 @@ build when the drawing and the measurement disagree.
   shorelines shift 0.56 and 0.24 pixels on a 320-pixel axis. That is interest
   accrual and nothing else, and accrual is slow. The gate prints the number
   every run. The map does not sell the bend.
+- **Relief is relief.** The coves and plateaus come from a warp and a noise
+  that are documented, applied to every reading, and forbidden from touching
+  sea level. They make the map readable; they do not add information.
 - **Two axes only.** One asset's price and how long it stayed there. Everything
   else the wallet holds is held constant, and collateral in a third volatile
   asset is badged on screen rather than quietly folded in.
 - **The registry is a subset.** A map drawn from four of seven sources is still
   worth reading, but only because it names the three that did not answer.
+- **The reference book is a fixture.** It loads before any key is set so the
+  map works out of the box. A surveyed address is live data, and the feed shows
+  the block height it was read at.
 
 ## Running it
 
@@ -163,31 +218,53 @@ cp .env.example .env.local   # then fill in GRAPH_API_KEY
 npm run verify:subgraphs     # resolve every registry id before trusting it
 ```
 
+`verify:subgraphs` writes `src/registry/verified.json`; a deployment whose id
+has not passed that check is not allowed to contribute to the terrain.
+
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
-| `npm test` | the full suite |
+| `npm test` | the full suite, 150 tests |
 | `npm run gate` | measure the terrain and fail on a flat map |
 | `npm run typecheck` | types |
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
+| `npm run bake:sprites` | regenerate the baked sheets under `public/assets/scree/` |
+| `npm run build` | production build |
+
+Query parameters: `?sources=id,id` restricts the registry, so the difference
+one schema makes is reproducible by anyone.
+
+## Layout
+
+| Path | What lives there |
+|---|---|
+| `src/core` | the kernel, liquidation prices, the bracket, wallet shape, fixtures |
+| `src/graph` | the one query, the gateway fan-out, normalisation, reduction to baskets |
+| `src/registry` | the deployments, all one schema, and their verification |
+| `src/field` | the raster and its features |
+| `src/render` | contours, hachures and the survey plate |
+| `src/sim` | the price walks the scouts follow |
+| `src/game` | terrain, tileset, clutter, holdfasts, the three scenes, the surveyor and the leviathans |
+| `scripts` | the geometry gate, the subgraph verifier, the sprite bakery |
 
 ## What it will never ask for
 
 Scree reads public positions. It does not request a token approval, hold a key,
-or move anyone's funds. Where a defence policy is armed, the system returns an
-action and a size; executing it stays the owner's own transaction.
-
+or move anyone's funds. Connecting a wallet asks for an address and nothing
+else. Where a defence policy is armed, the system returns an action and a size;
+executing it stays the owner's own transaction.
 
 ## Assets
 
 Sprites are from two CC0 packs by [Kenney](https://kenney.nl): Tiny Town and
 Tiny Dungeon, committed with their licences under `public/assets/kenney/`.
 The sheets under `public/assets/scree/` are generated by `npm run bake:sprites`
-(`scripts/bake-sprites.ts`): the surveyor's walk cycle and the leviathans'
-swim, dive and surface frames are derived from single Tiny Dungeon frames, and
-the clutter, peaks, particle motes and interface stock are drawn from
-the project's palette. The pixel face is Press Start 2P, served through
-`next/font` like the other three.
+(`scripts/bake-sprites.ts`, with its own PNG codec): the surveyor's forty
+frames are drawn from a pose, the leviathans' swim, dive and surface frames are
+derived from single Tiny Dungeon frames, and the clutter, peaks, particle motes
+and interface stock are drawn from the project's palette. The terrain tileset
+itself is painted at load from colours sampled off the pack. The pixel face is
+Press Start 2P, served through `next/font` like the other three.
 
 ## Licence
 
