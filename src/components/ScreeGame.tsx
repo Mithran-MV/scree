@@ -114,6 +114,8 @@ export function ScreeGame(props: Props) {
   const doorFieldRef = useRef<HTMLInputElement>(null);
   /** The host observer's apply, so the game can ask for a fresh measurement once it has booted. */
   const applySizeRef = useRef<() => void>(() => {});
+  /** The wallet the link named, if any, for the door's field once it is mounted. */
+  const linkedRef = useRef("");
   /** The host's size in CSS pixels, so the page can lay its inputs where the scenes draw their slots. */
   const [hostSize, setHostSize] = useState({ w: 0, h: 0 });
   /** The door is up until the survey begins; the address slot belongs to the survey. */
@@ -423,7 +425,7 @@ export function ScreeGame(props: Props) {
       // A link may carry the wallet: `?address=0x…` fills the door's field and walks in.
       const linked = new URLSearchParams(window.location.search).get("address")?.trim() ?? "";
       const linkedAddress = /^0x[0-9a-fA-F]{40}$/.test(linked) ? linked : "";
-      if (linkedAddress && doorFieldRef.current) doorFieldRef.current.value = linkedAddress;
+      linkedRef.current = linkedAddress;
       const landing = new LandingScene();
       const world = new WorldScene();
       const uiScene = new UIScene();
@@ -536,6 +538,12 @@ export function ScreeGame(props: Props) {
 
   const slot = hostSize.w > 0 ? layoutFor(hostSize.w, hostSize.h).slot : null;
   const door = hostSize.w > 0 ? doorLayout(hostSize.w, hostSize.h).input : null;
+
+  // The door's field mounts once the host has a size; a linked wallet goes in then.
+  useEffect(() => {
+    const field = doorFieldRef.current;
+    if (door && field && linkedRef.current && !field.value) field.value = linkedRef.current;
+  }, [door]);
 
   return (
     <div className="scree">
