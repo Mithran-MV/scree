@@ -24,9 +24,11 @@ cron trigger (Workflow DON)
 ║      the wallet's baskets across every deployment, spot, shape     ║
 ║ 3. decide(survey, policy)                                          ║
 ║      health today, the crash coast, HOLD / RAISE / DROWNED, lift   ║
+║ 4. keccak256(policy text)                                          ║
 ╚════════════════════════════╤═══════════════════════════════════════╝
                              │ runtime.usingTheDons()
-                             │ crosses out: wallet, verdict, health to the hundredth, lift
+                             │ crosses out: wallet, verdict, health to the hundredth, lift,
+                             │              and the hash of the policy, never the policy
                              ▼
 Workflow DON: report(…) signed under consensus
   │
@@ -35,8 +37,11 @@ EVMClient.writeReport → KeystoneForwarder → Guardian.onReport (Sepolia)
 ```
 
 The survey body, the policy, and the exact health stay in the enclave. The
-ledger learns that a terrace was raised, and by how much health, never where
-the owner's line is.
+ledger learns that a terrace was raised, by how much health, and the hash of
+the line it was measured against, never the line itself. The map reads that
+slot back: survey the wallet on the site and the feed shows the enclave's
+verdict, the terrace caption carries the policy hash, and the log says where
+it is recorded.
 
 ## Files
 
@@ -79,15 +84,16 @@ on Sepolia through the simulator's forwarder:
 Read it back from the ledger with the root project's `npm run guardian:read`:
 
 ```
-guardian     0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66 on Sepolia, 1 verdicts
-latest       RAISE  health 1.47  lift 0.16
-event        VerdictRecorded {"verdict":1,"healthBps":14700,"liftBps":1600,…}
+guardian     0x748d9c5791059f97dcaf950c6fe92c6b80451bd2 on Sepolia, 1 verdicts
+latest       RAISE  health 1.43  lift 0.17
+policy       0x9619de47…3bb3 (keccak256 of the private policy)
+event        VerdictRecorded {"verdict":1,"healthBps":14300,"liftBps":1700,"policyHash":"0x9619…"}
 ```
 
 ## The ledger
 
 `Guardian.sol` is deployed on Sepolia at
-[`0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66`](https://sepolia.etherscan.io/address/0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66).
+[`0x748d9c5791059f97dcaf950c6fe92c6b80451bd2`](https://sepolia.etherscan.io/address/0x748d9c5791059f97dcaf950c6fe92c6b80451bd2).
 It accepts reports from the network's KeystoneForwarder and, because this is
 a testnet ledger meant to receive simulated runs, from the simulator's
 MockKeystoneForwarder as well. A production ledger would list the real

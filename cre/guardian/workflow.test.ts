@@ -1,7 +1,7 @@
 import { describe, expect } from 'bun:test'
 import type { TeeRuntime } from '@chainlink/cre-sdk'
 import { test } from '@chainlink/cre-sdk/test'
-import { decodeAbiParameters, parseAbiParameters } from 'viem'
+import { decodeAbiParameters, keccak256, parseAbiParameters, stringToHex } from 'viem'
 import { coarseBps, crashPrice, decide, healthToday, onCronTrigger, type Config, type Survey } from './workflow'
 
 const WALLET = '0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4'
@@ -110,8 +110,8 @@ describe('onCronTrigger', () => {
 		onCronTrigger(runtime)
 		expect(reports).toHaveLength(1)
 		const hex = `0x${Buffer.from(reports[0]!.encodedPayload, 'base64').toString('hex')}` as `0x${string}`
-		const [wallet, verdict, healthBps, liftBps] = decodeAbiParameters(
-			parseAbiParameters('address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt'),
+		const [wallet, verdict, healthBps, liftBps, , policyHash] = decodeAbiParameters(
+			parseAbiParameters('address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt, bytes32 policyHash'),
 			hex,
 		)
 		expect(wallet.toLowerCase()).toBe(WALLET)
@@ -120,6 +120,8 @@ describe('onCronTrigger', () => {
 		const d = decide(survey, policy)
 		expect(liftBps).toBe(coarseBps(d.lift))
 		expect(liftBps).toBe(1600)
+		// The hash of the policy text, and nothing that would give the text away.
+		expect(policyHash).toBe(keccak256(stringToHex(JSON.stringify(policy))))
 		// The policy numbers must not appear in anything that left the enclave.
 		for (const line of logs) expect(line).not.toContain('1.6')
 	})

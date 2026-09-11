@@ -6,7 +6,7 @@ import { TerrainMap } from "@/components/TerrainMap";
 import type { Sources } from "@/components/ScreeGame";
 import { MarketsWindow, type MarketsPayload } from "@/components/MarketsWindow";
 import { ReceiptsWindow, type TrailPayload } from "@/components/ReceiptsWindow";
-import type { Payment } from "@/components/ScreeGame";
+import type { Guardian, Payment } from "@/components/ScreeGame";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import type { Basket } from "@/core/types";
 
@@ -25,6 +25,8 @@ interface Loaded {
   offAxisCollateralUSD: number;
   /** How this survey was bought, when the platform bought it. */
   payment: Payment | null;
+  /** The address surveyed, for the enclave's verdict; none for the reference book. */
+  address: string | null;
 }
 
 const DEMO: Loaded = {
@@ -34,6 +36,7 @@ const DEMO: Loaded = {
   sources: { asked: [], healthy: [], notes: [] },
   offAxisCollateralUSD: 0.153 * 110_000,
   payment: null,
+  address: null,
 };
 
 export default function Page() {
@@ -44,6 +47,29 @@ export default function Page() {
   const [plate, setPlate] = useState(false);
   const [marketsOpen, setMarketsOpen] = useState(false);
   const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [guardian, setGuardian] = useState<Guardian | null>(null);
+
+  // The enclave's verdict for the surveyed wallet, read back from the ledger.
+  useEffect(() => {
+    const address = loaded.address;
+    if (!address) {
+      setGuardian(null);
+      return;
+    }
+    let stale = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/guardian?address=${encodeURIComponent(address)}`);
+        const body = (await res.json()) as Guardian & { error?: string };
+        if (!stale) setGuardian(res.ok ? body : null);
+      } catch {
+        if (!stale) setGuardian(null);
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [loaded.address]);
   const [trail, setTrail] = useState<TrailPayload | null>(null);
   const [trailError, setTrailError] = useState<string | null>(null);
 
@@ -128,6 +154,7 @@ export default function Page() {
         },
         offAxisCollateralUSD: body.offAxisCollateralUSD ?? 0,
         payment: body.payment ?? null,
+        address: target,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -206,6 +233,7 @@ export default function Page() {
           if (!markets || Date.now() - Date.parse(markets.readAt) > 120_000) void loadMarkets();
         }}
         payment={loaded.payment}
+        guardian={guardian}
         onReceipts={() => {
           setReceiptsOpen(true);
           void loadTrail();

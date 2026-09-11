@@ -261,14 +261,17 @@ will buy. If that line were public, so would be the level at which to push.
 private: a handler registered with `handlerInTee` fetches the policy as a
 Vault DON secret inside the enclave, fetches the wallet's survey from inside
 the enclave, decides `HOLD`, `RAISE` or `DROWNED` with the same kernel the map
-uses, and crosses back to the DON with the verdict, a coarse health and the
-lift, nothing else. The DON signs it and a forwarder delivers it to the
-`Guardian` ledger on Sepolia.
+uses, and crosses back to the DON with the verdict, a coarse health, the
+lift and the hash of the policy, nothing else. The DON signs it and a
+forwarder delivers it to the `Guardian` ledger on Sepolia. Survey the wallet
+on the site and the map reads that slot back: the feed shows the enclave's
+verdict, the terrace caption carries the policy hash, and the log says where
+it is recorded.
 
 It runs in the CRE simulator, and with `--broadcast` the verdict lands on the
 real ledger; `cre/evidence/` holds transcripts of both and the ledger read
 back. The ledger is at
-[`0x9e87c0d9…7c66`](https://sepolia.etherscan.io/address/0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66),
+[`0x748d9c57…1bd2`](https://sepolia.etherscan.io/address/0x748d9c5791059f97dcaf950c6fe92c6b80451bd2),
 and `npm run guardian:read` prints its latest verdict for a wallet. See
 [`cre/README.md`](cre/README.md) for the flow and the arithmetic.
 

@@ -32,6 +32,9 @@ contract Guardian is IReceiver {
         uint32 liftBps;
         uint64 observedAt;
         uint64 recordedAt;
+        /// keccak256 of the policy the enclave decided under. The policy itself never leaves the enclave;
+        /// its hash lets the owner prove which line a verdict was measured against.
+        bytes32 policyHash;
     }
 
     address public owner;
@@ -42,7 +45,7 @@ contract Guardian is IReceiver {
     uint256 public count;
     mapping(address => Reading) public latest;
 
-    event VerdictRecorded(address indexed wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt);
+    event VerdictRecorded(address indexed wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt, bytes32 policyHash);
     event ForwarderUpdated(address indexed forwarder, bool allowed);
 
     error NotOwner();
@@ -60,15 +63,15 @@ contract Guardian is IReceiver {
     }
 
     /// @inheritdoc IReceiver
-    /// @param report ABI-encoded (address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt)
+    /// @param report ABI-encoded (address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt, bytes32 policyHash)
     function onReport(bytes calldata, bytes calldata report) external override {
         if (!forwarders[msg.sender]) revert NotForwarder(msg.sender);
-        (address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt) =
-            abi.decode(report, (address, uint8, uint32, uint32, uint64));
+        (address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt, bytes32 policyHash) =
+            abi.decode(report, (address, uint8, uint32, uint32, uint64, bytes32));
         if (verdict > 2) revert UnknownVerdict(verdict);
-        latest[wallet] = Reading(verdict, healthBps, liftBps, observedAt, uint64(block.timestamp));
+        latest[wallet] = Reading(verdict, healthBps, liftBps, observedAt, uint64(block.timestamp), policyHash);
         count += 1;
-        emit VerdictRecorded(wallet, verdict, healthBps, liftBps, observedAt);
+        emit VerdictRecorded(wallet, verdict, healthBps, liftBps, observedAt, policyHash);
     }
 
     function setForwarder(address forwarder, bool allowed) external {

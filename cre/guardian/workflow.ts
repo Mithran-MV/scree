@@ -8,7 +8,7 @@ import {
 	TxStatus,
 	type TeeRuntime,
 } from '@chainlink/cre-sdk'
-import { encodeAbiParameters, parseAbiParameters, type Address } from 'viem'
+import { encodeAbiParameters, keccak256, parseAbiParameters, stringToHex, type Address } from 'viem'
 import { z } from 'zod'
 
 /**
@@ -20,8 +20,8 @@ import { z } from 'zod'
  * liquidated above, and how much of a lift they are willing to buy. The survey
  * response (which deployments the wallet borrows from, and how much) and the
  * policy both stay inside the enclave. What crosses back to the DON, and from
- * there to the Guardian contract, is a verdict, a coarse health, and the lift
- * the verdict asks for. A watcher of the chain learns that a terrace was
+ * there to the Guardian contract, is a verdict, a coarse health, the lift the
+ * verdict asks for, and the hash of the policy. A watcher of the chain learns that a terrace was
  * raised, never where the owner's line is.
  */
 
@@ -147,7 +147,11 @@ export const onCronTrigger = (runtime: TeeRuntime<Config>): string => {
 	const config = runtime.config
 
 	// The policy is released by the Vault DON into the attested enclave only.
-	const policy = policySchema.parse(JSON.parse(runtime.getSecret({ id: config.policySecretId }).result().value))
+	const policyText = runtime.getSecret({ id: config.policySecretId }).result().value
+	const policy = policySchema.parse(JSON.parse(policyText))
+	// Its hash crosses out with the verdict: the owner can prove which line a
+	// verdict was measured against without the line itself ever leaving.
+	const policyHash = keccak256(stringToHex(policyText))
 
 	// The survey is fetched from inside the enclave; its body, the wallet's
 	// positions across every deployment, is confidential from node operators.
@@ -171,8 +175,8 @@ export const onCronTrigger = (runtime: TeeRuntime<Config>): string => {
 	const donRuntime = runtime.usingTheDons()
 	const observedAt = BigInt(Math.floor(Date.parse(survey.readAt) / 1000))
 	const encodedPayload = encodeAbiParameters(
-		parseAbiParameters('address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt'),
-		[config.wallet as Address, VERDICT[decision.verdict], coarseBps(decision.health), coarseBps(decision.lift), observedAt],
+		parseAbiParameters('address wallet, uint8 verdict, uint32 healthBps, uint32 liftBps, uint64 observedAt, bytes32 policyHash'),
+		[config.wallet as Address, VERDICT[decision.verdict], coarseBps(decision.health), coarseBps(decision.lift), observedAt, policyHash],
 	)
 	const report = donRuntime
 		.report({

@@ -11,7 +11,7 @@ import { loadLocalEnv } from "./lib/env";
 
 loadLocalEnv();
 
-const GUARDIAN = (process.env.GUARDIAN_ADDRESS ?? "0x9e87c0d92585b7a57c050bfa77e0d4e15dcc7c66") as Hex;
+const GUARDIAN = (process.env.GUARDIAN_ADDRESS ?? "0x748d9c5791059f97dcaf950c6fe92c6b80451bd2") as Hex;
 const VERDICTS = ["HOLD", "RAISE", "DROWNED"] as const;
 
 const { abi } = JSON.parse(readFileSync("cre/contracts/Guardian.json", "utf8")) as { abi: Abi };
@@ -33,7 +33,7 @@ for (const [name, addr] of Object.entries(FORWARDERS)) {
   if (await client.readContract({ address: GUARDIAN, abi, functionName: "forwarders", args: [addr as Hex] })) trusted.push(name);
 }
 const latest = (await client.readContract({ address: GUARDIAN, abi, functionName: "latest", args: [wallet] })) as readonly [
-  number, number, number, bigint, bigint,
+  number, number, number, bigint, bigint, Hex,
 ];
 console.log(`guardian     ${GUARDIAN} on Sepolia, ${count} verdicts, trusts ${trusted.join(" and ")}`);
 console.log(`wallet       ${wallet}`);
@@ -43,6 +43,7 @@ if (latest[4] === 0n) {
   console.log(`latest       ${VERDICTS[latest[0]] ?? latest[0]}  health ${(latest[1] / 10000).toFixed(2)}  lift ${(latest[2] / 10000).toFixed(2)}`);
   console.log(`observed     ${new Date(Number(latest[3]) * 1000).toISOString()}`);
   console.log(`recorded     ${new Date(Number(latest[4]) * 1000).toISOString()}`);
+  console.log(`policy       ${latest[5]} (keccak256 of the private policy)`);
 }
 if (tx) {
   const receipt = await client.getTransactionReceipt({ hash: tx });

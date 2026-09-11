@@ -30,6 +30,20 @@ export interface Payment {
   links: { transaction: string; topic: string | null };
 }
 
+/** The enclave's latest verdict for the surveyed wallet, as `/api/guardian` reads it from the ledger. */
+export interface Guardian {
+  guardian: string;
+  count: number;
+  wallet: string;
+  verdict: "HOLD" | "RAISE" | "DROWNED" | null;
+  health: number | null;
+  lift: number | null;
+  policyHash: string | null;
+  observedAt: string | null;
+  recordedAt: string | null;
+  links: { contract: string; events: string };
+}
+
 export interface Sources {
   /** Deployments the survey asked, in registry order. Empty for the reference book. */
   asked: string[];
@@ -61,6 +75,7 @@ interface Props {
   markets: MarketsPayload | null;
   onMarkets: () => void;
   payment: Payment | null;
+  guardian: Guardian | null;
   onReceipts: () => void;
 }
 
@@ -221,9 +236,13 @@ export function ScreeGame(props: Props) {
       curve,
       lifted,
       band: { lo: 0, hi: hiDays },
-      note: `Proposed: +${terrace.liftHF.toFixed(2)} health for ${PROPOSED.days}d moves the crash edge from ${usd(edge)} to ${usd(edge * ratio)} (first order).`,
+      note:
+        `Proposed: +${terrace.liftHF.toFixed(2)} health for ${PROPOSED.days}d moves the crash edge from ${usd(edge)} to ${usd(edge * ratio)} (first order).` +
+        (props.guardian?.verdict
+          ? ` Enclave: ${props.guardian.verdict}${props.guardian.lift ? ` +${props.guardian.lift.toFixed(2)}` : ""}, policy ${props.guardian.policyHash?.slice(2, 8)}.`
+          : ""),
     };
-  }, [baskets, win, terraces, healthToday]);
+  }, [baskets, win, terraces, healthToday, props.guardian]);
 
   /* ── the feed ─────────────────────────────────────────────────── */
 
@@ -239,6 +258,15 @@ export function ScreeGame(props: Props) {
         ...(sources.notes.length ? { tone: "peril" as const } : {}),
       },
       ...(props.payment ? [{ key: "paid", value: `${props.payment.paidHbar} HBAR · settled`, tone: "ley" as const }] : []),
+      ...(props.guardian?.verdict
+        ? [
+            {
+              key: "enclave verdict",
+              value: `${props.guardian.verdict}${props.guardian.lift ? ` · lift +${props.guardian.lift.toFixed(2)}` : ""}`,
+              tone: props.guardian.verdict === "HOLD" ? ("ley" as const) : ("peril" as const),
+            },
+          ]
+        : []),
       { key: "health today", value: healthToday.toFixed(3), tone: "ley" },
       { key: "crash liquidation", value: usd(br.lower), tone: "peril" },
       { key: "pump liquidation", value: usd(br.upper), tone: "peril" },
@@ -249,7 +277,7 @@ export function ScreeGame(props: Props) {
       { key: "passes", value: features.boundaryPass ? "1" : "0", tone: "ley" },
       { key: "rises with price", value: `${(features.monoFraction * 100).toFixed(1)}%` },
     ],
-    [spot, sources, props.payment, healthToday, br, shape, grid.zones.length, features],
+    [spot, sources, props.payment, props.guardian, healthToday, br, shape, grid.zones.length, features],
   );
 
   const notes = useMemo(() => {
@@ -259,8 +287,15 @@ export function ScreeGame(props: Props) {
         `Bought this survey for ${props.payment.paidHbar} HBAR from ${props.payment.payer}: settled on Hedera as ${props.payment.transaction}, receipt on the topic. Open Receipts for the links.`,
       );
     }
+    const g = props.guardian;
+    if (g?.verdict) {
+      const when = g.observedAt ? new Date(g.observedAt).toUTCString().replace(" GMT", " UTC") : "";
+      lines.unshift(
+        `The enclave's verdict on this wallet: ${g.verdict}${g.lift ? `, lift +${g.lift.toFixed(2)} health` : ""}, measured ${when} against policy ${g.policyHash?.slice(0, 10)}…, which never left the enclave. Recorded on Sepolia at ${g.guardian.slice(0, 10)}…`,
+      );
+    }
     return lines;
-  }, [sources, props.payment]);
+  }, [sources, props.payment, props.guardian]);
 
   /* ── state pushed to the interface ────────────────────────────── */
 
