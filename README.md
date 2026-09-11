@@ -190,9 +190,58 @@ affine leg shifts the ridge off the mean.
 
 The reading the map draws is also a thing an agent can buy. `/api/survey` is
 the same survey as `/api/terrain`, gated by [x402](https://github.com/x402-foundation/x402)
-on Hedera and metered by what it asks for.
+on Hedera, settled through the [Blocky402](https://blocky402.com/)
+facilitator, and metered by what it asks for.
 
-1. An agent that has never seen the service reads `/api/survey/manifest`: the
+### Setup
+
+Two Hedera testnet accounts with ECDSA keys: one receives (the service) and
+one pays (the platform's own agent, which is also what `scripts/scout.ts`
+pays with). The portal faucet at portal.hedera.com creates and funds an
+account from an EVM address. Then:
+
+```bash
+cp .env.example .env.local      # HEDERA_ACCOUNT_ID, HEDERA_PRIVATE_KEY, AGENT_HEDERA_ACCOUNT_ID, BURNER_PRIVATE_KEY, PUBLIC_URL
+npm run hedera:topic            # creates the receipts topic; put the id in HCS_RECEIPTS_TOPIC
+npm run dev                     # /api/survey now answers 402 without payment
+npm run scout -- --address 0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4 --budget 0.5 --service http://localhost:3000
+```
+
+The facilitator is pinned, not defaulted. From `src/x402/service.ts`:
+
+```ts
+// Pinned on purpose. The reference implementation defaults testnet to a
+// generic facilitator; this service settles through Blocky402 on both.
+return network.endsWith("mainnet") ? "https://api.blocky402.com" : "https://api.testnet.blocky402.com";
+```
+
+Testnet needs no facilitator key. The price schedule is two numbers in the
+environment, `SURVEY_BASE_TINYBAR` and `SURVEY_PER_SOURCE_TINYBAR`.
+
+### Architecture
+
+```
+buyer (the map's own account, or the scout)          service (this app)                 Hedera
+──────────────────────────────────────────           ───────────────────────            ───────────────────
+GET /api/survey/manifest ───────────────────────────▶ endpoint, rail, prices, topic
+GET /api/survey?address=… ──────────────────────────▶ 402 + PAYMENT-REQUIRED (exact quote)
+sign HBAR transfer for the quote
+GET … + PAYMENT-SIGNATURE ──────────────────────────▶ verify ─────────────────────────▶ Blocky402 /verify
+                                                      run the survey (one query, seven deployments)
+                                                      settle ─────────────────────────▶ Blocky402 /settle → transfer on Hedera
+◀──────────────────────── 200 + settlement header ──┘
+                                                      receipt ────────────────────────▶ HCS topic 0.0.10439715
+```
+
+The pieces: `src/x402/pricing.ts` (the schedule), `src/x402/service.ts` (the
+gate: resource server, facilitator client, receipt hook), `src/x402/buyer.ts`
+(the platform as a buyer), `src/app/api/survey/` (the paid route and the
+manifest), `src/hedera/receipts.ts` (writing the topic), `src/hedera/trail.ts`
+(reading it back), `src/app/api/receipts/` and the **Receipts** window.
+
+### Payment flow
+
+1. A buyer that has never seen the service reads `/api/survey/manifest`: the
    endpoint, the rail (x402 `exact` scheme, HBAR on `hedera:testnet`, the
    service account it pays), the price schedule with a worked example, which
    deployments can be asked, and the topic where receipts are written.
@@ -203,35 +252,30 @@ on Hedera and metered by what it asks for.
    deployment the registry cannot vouch for, because it is never asked.
 3. It signs a Hedera transfer for that amount with its own ECDSA key and
    retries with the signed transaction in the `PAYMENT-SIGNATURE` header.
-4. The service asks the [Blocky402](https://blocky402.com/) facilitator to
-   verify the payment, runs the survey, and only then has the facilitator
-   settle the transfer on Hedera. If the survey fails, the payment is cancelled
-   rather than settled. The settlement transaction id comes back in the
-   response headers.
-5. After settlement the service writes one message to a Hedera Consensus
-   Service topic: what was asked, what was paid and by whom, the settlement
-   transaction, and the SHA-256 of the body exactly as it was sent. A buyer can
-   hash what it received and find that digest on the public topic.
+4. The service asks the facilitator to verify the payment, runs the survey,
+   and only then has the facilitator settle the transfer on Hedera. If the
+   survey fails, the payment is cancelled rather than settled. The settlement
+   transaction id comes back in the response headers.
+5. After settlement the service writes one message to the Consensus Service
+   topic: what was asked, what was paid and by whom, the settlement
+   transaction, and the SHA-256 of the body exactly as it was sent. A buyer
+   can hash what it received and find that digest on the public topic.
 
-The map is itself a buyer. When the platform has an agent account of its
-own, it does not read the survey from the inside: every survey a visitor
-makes on the site is bought from `/api/survey` by that account, the way any
-other agent buys it, and the settlement comes back with the reading. The
-feed shows `paid · 0.045 HBAR · settled`, the log names the transaction, and
-the **Receipts** window lists the topic read back through the mirror node,
-every row linked to the explorer. If the purchase cannot be made the survey
-is read directly and the reason is named, so the map is never blank because
-a payment rail was.
+The map is itself a buyer. Every survey a visitor makes on the site is bought
+from `/api/survey` by the platform's own account, the way any other agent
+buys it, and the settlement comes back with the reading: the feed shows
+`paid · 0.045 HBAR · settled`, the log names the transaction, and the
+**Receipts** window lists the topic read back through the mirror node, every
+row linked to the explorer. If the purchase cannot be made the survey is read
+directly and the reason is named, so the map is never blank because a payment
+rail was.
 
-The other buyer in this repository is `scripts/scout.ts`, an agent with a
-budget in HBAR. It discovers the service from the manifest, refuses any request that
-would exceed its budget or a price above the quote it expected, pays, prints
-the reading with the settlement link, and then reads the topic back until it
+The other buyer is `scripts/scout.ts`, an agent with a budget in HBAR. It
+discovers the service from the manifest, refuses any request that would
+exceed its budget or a price above the quote it expected, pays, prints the
+reading with the settlement link, and then reads the topic back until it
 finds the receipt for its own transaction and confirms the digest matches.
-
-```bash
-npm run scout -- --address 0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4 --budget 0.5 --service https://scree.hacklabs.in
-```
+Pass `--every 10` to re-survey on a schedule until the budget is spent.
 
 ```
 price     0.01 + 0.005 × 7 sources = 0.045 HBAR per survey
@@ -242,14 +286,51 @@ price     0.01 + 0.005 × 7 sources = 0.045 HBAR per survey
   receipt   topic 0.0.10439715 #1, digest matches what I received
 ```
 
-Pass `--every 10` to re-survey on a schedule until the budget is spent. The
-pieces: `src/x402/pricing.ts` (the schedule), `src/x402/service.ts` (the gate:
-resource server, facilitator client, receipt hook), `src/app/api/survey/`
-(the paid route and the manifest), `src/hedera/receipts.ts` (the topic), and
-`scripts/new-topic.ts` to create a topic once per deployment. The facilitator
-is pinned to Blocky402 for both networks; the reference implementation's
-testnet default is a different facilitator, and that is easy to inherit by
-accident.
+### A receipt, decoded
+
+Message #8 on topic
+[0.0.10439715](https://hashscan.io/testnet/topic/0.0.10439715), as the
+mirror node returns it and `src/hedera/trail.ts` decodes it:
+
+```json
+{
+  "v": 1,
+  "kind": "survey",
+  "at": "2026-09-11T12:42:33.390Z",
+  "address": "0xb7b7eb7e9611975bc9715f22ce7e6ee288296fd4",
+  "asked": [
+    "aave-v3-ethereum",
+    "aave-v3-arbitrum",
+    "aave-v3-polygon",
+    "aave-v3-avalanche",
+    "compound-v3-ethereum",
+    "compound-v3-arbitrum",
+    "spark-ethereum"
+  ],
+  "healthy": [
+    "aave-v3-ethereum",
+    "aave-v3-arbitrum",
+    "aave-v3-polygon",
+    "aave-v3-avalanche",
+    "compound-v3-ethereum",
+    "compound-v3-arbitrum",
+    "spark-ethereum"
+  ],
+  "spot": 2486.17991714,
+  "shape": "LONG-ONLY",
+  "payer": "0.0.10438429",
+  "payTo": "0.0.10438442",
+  "network": "hedera:testnet",
+  "asset": "0.0.0",
+  "amount": "4500000",
+  "transaction": "0.0.7162784@1789130544.123126771",
+  "bodySha256": "031fa62dffdbcf5d43e8a25b1dee4f2d1b2332581d2b5a7f27b43b94d43e3987"
+}
+```
+
+`amount` is tinybar. `transaction` is the settlement the facilitator
+submitted, viewable on HashScan. `bodySha256` is the digest of the exact
+bytes the buyer received.
 
 ## The private terrace
 
@@ -267,6 +348,8 @@ forwarder delivers it to the `Guardian` ledger on Sepolia. Survey the wallet
 on the site and the map reads that slot back: the feed shows the enclave's
 verdict, the terrace caption carries the policy hash, and the log says where
 it is recorded.
+
+![What stays inside the enclave, what leaves for consensus, what lands on chain](docs/enclave-boundary.svg)
 
 It runs in the CRE simulator, and with `--broadcast` the verdict lands on the
 real ledger; `cre/evidence/` holds transcripts of both and the ledger read

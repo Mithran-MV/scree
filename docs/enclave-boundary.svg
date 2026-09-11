@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="13">
+  <rect width="960" height="420" fill="#141c22"/>
+  <!-- enclave -->
+  <rect x="24" y="24" width="440" height="372" rx="6" fill="#0b2430" stroke="#35e0e8" stroke-width="2"/>
+  <text x="44" y="52" fill="#35e0e8" font-size="14" font-weight="bold">INSIDE THE ENCLAVE (handlerInTee, AWS Nitro)</text>
+  <text x="44" y="72" fill="#8fa8b2">nothing here is visible to node operators</text>
+  <rect x="44" y="92" width="400" height="58" rx="4" fill="#11364a" stroke="#1d7d8c"/>
+  <text x="56" y="114" fill="#dfeef2">1  runtime.getSecret(TERRACE_POLICY)</text>
+  <text x="56" y="134" fill="#8fa8b2">   the owner's line: minHealth, floorPrice, maxLift</text>
+  <rect x="44" y="162" width="400" height="58" rx="4" fill="#11364a" stroke="#1d7d8c"/>
+  <text x="56" y="184" fill="#dfeef2">2  HTTPClient.sendRequest(runtime, survey?address=…)</text>
+  <text x="56" y="204" fill="#8fa8b2">   the wallet's baskets across seven deployments, spot</text>
+  <rect x="44" y="232" width="400" height="58" rx="4" fill="#11364a" stroke="#1d7d8c"/>
+  <text x="56" y="254" fill="#dfeef2">3  decide(survey, policy)</text>
+  <text x="56" y="274" fill="#8fa8b2">   health today, crash coast, HOLD / RAISE / DROWNED, lift</text>
+  <rect x="44" y="302" width="400" height="40" rx="4" fill="#11364a" stroke="#1d7d8c"/>
+  <text x="56" y="327" fill="#dfeef2">4  keccak256(policy text)</text>
+  <text x="44" y="380" fill="#e2603a">stays: policy · survey body · exact health</text>
+  <!-- boundary arrow -->
+  <line x1="464" y1="210" x2="536" y2="210" stroke="#e4d5ad" stroke-width="2"/>
+  <polygon points="536,204 548,210 536,216" fill="#e4d5ad"/>
+  <text x="470" y="196" fill="#e4d5ad" font-size="11">usingTheDons()</text>
+  <!-- DON -->
+  <rect x="552" y="120" width="184" height="180" rx="6" fill="#1e2a33" stroke="#b08d4a" stroke-width="2"/>
+  <text x="566" y="146" fill="#b08d4a" font-size="14" font-weight="bold">WORKFLOW DON</text>
+  <text x="566" y="172" fill="#dfeef2">crosses out only:</text>
+  <text x="566" y="192" fill="#dfeef2">· wallet</text>
+  <text x="566" y="210" fill="#dfeef2">· verdict</text>
+  <text x="566" y="228" fill="#dfeef2">· health to 0.01</text>
+  <text x="566" y="246" fill="#dfeef2">· lift</text>
+  <text x="566" y="264" fill="#dfeef2">· policy hash</text>
+  <text x="566" y="288" fill="#8fa8b2" font-size="11">report(): signed under consensus</text>
+  <!-- arrow to chain -->
+  <line x1="736" y1="210" x2="792" y2="210" stroke="#e4d5ad" stroke-width="2"/>
+  <polygon points="792,204 804,210 792,216" fill="#e4d5ad"/>
+  <text x="726" y="196" fill="#e4d5ad" font-size="11">writeReport</text>
+  <!-- chain -->
+  <rect x="808" y="120" width="128" height="180" rx="6" fill="#1e2a33" stroke="#4fbf8b" stroke-width="2"/>
+  <text x="822" y="146" fill="#4fbf8b" font-size="14" font-weight="bold">SEPOLIA</text>
+  <text x="822" y="172" fill="#dfeef2">Forwarder</text>
+  <text x="822" y="190" fill="#8fa8b2">↓ onReport</text>
+  <text x="822" y="214" fill="#dfeef2">Guardian</text>
+  <text x="822" y="232" fill="#8fa8b2" font-size="11">latest[wallet]</text>
+  <text x="822" y="250" fill="#8fa8b2" font-size="11">VerdictRecorded</text>
+  <text x="822" y="280" fill="#8fa8b2" font-size="11">read back by the map</text>
+</svg>
