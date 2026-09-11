@@ -50,39 +50,43 @@ export const WALLET_POSITIONS = /* GraphQL */ `
 `;
 
 /**
- * The market rows behind the flood layer: everyone's exposure, not just yours.
- * Ordered by size because the tail cannot move the water table meaningfully and
- * fetching all of it would price the tiles out of reach.
+ * The second question, asked of the same seven deployments in the same shape.
+ *
+ * Where WalletPositions asks what one address holds, this asks what each
+ * market is: how much is in it, how much is borrowed, at what threshold it
+ * liquidates, how far a fresh borrower may lever, and what it pays. Nothing
+ * here names a protocol either, which is what lets one holdfast's plaque and
+ * another's be filled from the same fields.
  */
-export const MARKET_POSITIONS = /* GraphQL */ `
-  query MarketPositions($first: Int!) {
-    markets(first: 25, orderBy: totalValueLockedUSD, orderDirection: desc) {
+export const MARKETS = /* GraphQL */ `
+  query Markets($first: Int!) {
+    markets(first: $first, orderBy: totalValueLockedUSD, orderDirection: desc) {
       id
       name
+      canBorrowFrom
+      canUseAsCollateral
       liquidationThreshold
+      maximumLTV
+      liquidationPenalty
       inputTokenPriceUSD
+      totalValueLockedUSD
+      totalDepositBalanceUSD
+      totalBorrowBalanceUSD
       inputToken {
         id
         symbol
         decimals
       }
-      positions(
-        where: { balance_gt: "0" }
-        first: $first
-        orderBy: balance
-        orderDirection: desc
-      ) {
-        id
+      rates(where: { side_in: [LENDER, BORROWER] }) {
         side
-        balance
-        account {
-          id
-        }
+        type
+        rate
       }
     }
     _meta {
       block {
         number
+        timestamp
       }
     }
   }

@@ -49,6 +49,8 @@ export interface UIState {
    * them. Each new line is written to the log once.
    */
   notes: string[];
+  /** Each deployment's market size in the charted asset, in USD, for the banners. */
+  tvl: Record<string, number>;
   /** Owned by the interface: set when the scouts go out, cleared when the world reports them home. */
   scoutsBusy: boolean;
 }
@@ -66,6 +68,7 @@ export interface UIData {
     reference: () => void;
     scouts: () => void;
     plate: () => void;
+    markets: () => void;
   };
 }
 
@@ -85,6 +88,17 @@ interface Banner {
 
 const usd = (x: number | null) =>
   x === null || !Number.isFinite(x) ? "—" : `$${x.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+const usd0 = (x: number) => `$${Math.round(x).toLocaleString("en-US")}`;
+/** aave-v3-ethereum → aave·eth: room on a scale. */
+const shortId = (id: string) => {
+  const [protocol, , network] = id.split("-");
+  const net = { ethereum: "eth", arbitrum: "arb", polygon: "poly", avalanche: "avax", base: "base", optimism: "op", gnosis: "gno" }[network ?? ""] ?? network ?? "";
+  const proto = { aave: "aave", compound: "comp", spark: "spark" }[protocol ?? ""] ?? protocol ?? id;
+  return net ? `${proto}·${net}` : proto;
+};
+/** $3.6B, $412M, $9.1M: a size on a banner. */
+const short = (x: number) =>
+  x >= 1e9 ? `$${(x / 1e9).toFixed(1)}B` : x >= 1e6 ? `$${(x / 1e6).toFixed(x >= 1e8 ? 0 : 1)}M` : x >= 1e3 ? `$${(x / 1e3).toFixed(0)}K` : `$${x.toFixed(0)}`;
 const days = (d: number) => (d < 1 ? `${Math.round(d * 24)}h` : `${d.toFixed(1)}d`);
 
 /**
@@ -115,6 +129,7 @@ export class UIScene extends Phaser.Scene {
   private log: string[] = [];
   private banners: Banner[] = [];
   private axisLabels: Phaser.GameObjects.Text[] = [];
+  private markLabels: Phaser.GameObjects.Text[] = [];
 
   constructor() {
     super({ key: "UIScene" });
@@ -191,8 +206,10 @@ export class UIScene extends Phaser.Scene {
     const f = this.opts.fonts;
     for (const b of this.banners) b.box.destroy();
     for (const t of this.axisLabels) t.destroy();
+    for (const t of this.markLabels) t.destroy();
     this.banners = this.world.holdfasts.map((anchor) => {
-      const text = label(this, 0, 0, `${anchor.deploymentId} · ${Math.round(anchor.share * 100)}%`, { size: TYPE.kicker, font: f.pixel, color: T.vellumInk, crisp: true });
+      const tvl = this.state.tvl[anchor.deploymentId];
+      const text = label(this, 0, 0, `${anchor.deploymentId} · ${Math.round(anchor.share * 100)}%${tvl ? ` · ${short(tvl)}` : ""}`, { size: TYPE.kicker, font: f.pixel, color: T.vellumInk, crisp: true });
       const w = Math.round(text.width) + 38;
       const h = 26;
       const flag = this.add.rectangle(11, 8, 8, 10, anchor.colour).setOrigin(0, 0);
@@ -205,6 +222,10 @@ export class UIScene extends Phaser.Scene {
     });
     this.axisLabels = this.world.axisTicks.map((tick) =>
       label(this, 0, 0, `$${tick.price.toLocaleString("en-US")}`, { size: TYPE.kicker, font: f.pixel, color: T.vellumInk, crisp: true, align: "center" }).setDepth(UI_DEPTH.banners),
+    );
+    // The high-water marks are lettered with the deployment and the price a maximum-leverage borrower drowns at.
+    this.markLabels = this.world.axisMarks.map((m) =>
+      label(this, 0, 0, `${shortId(m.deploymentId)} ${usd0(m.price)}`, { size: TYPE.kicker, font: f.pixel, color: m.colour, crisp: true, stroke: { color: T.vellum, thickness: 3 } }).setDepth(UI_DEPTH.banners),
     );
   }
 
@@ -232,6 +253,26 @@ export class UIScene extends Phaser.Scene {
       const inside = x > v.x + 20 && x < v.x + v.w - 20 && y > v.y && y < v.y + v.h - 8;
       t.setVisible(inside).setPosition(Math.round(x), Math.round(y));
     });
+    // Mark labels hang from their flags. Flags can crowd one stretch of the
+    // scale, so labels take the first of four rows with room; one that would
+    // overprint on every row is left to its flag alone until the map is
+    // zoomed in and the rows open up.
+    const rows: number[] = [-Infinity, -Infinity, -Infinity, -Infinity];
+    const order = this.world.axisMarks.map((m, i) => ({ m, i })).sort((a, b) => a.m.fx - b.m.fx);
+    for (const { m, i } of order) {
+      const t = this.markLabels[i];
+      if (!t) continue;
+      const x = sx(m.fx * this.world.worldWidth) + 6;
+      const row = rows.findIndex((right) => x > right + 6);
+      if (row < 0) {
+        t.setVisible(false);
+        continue;
+      }
+      rows[row] = x + t.width;
+      const y = sy(this.world.worldHeight + AXIS_H * (0.46 + row * 0.13));
+      const inside = x > v.x && x + t.width < v.x + v.w && y > v.y && y < v.y + v.h - 8;
+      t.setVisible(inside).setPosition(Math.round(x), Math.round(y));
+    }
   }
 
   /** Replace part of the state and redraw what shows it. */
@@ -246,7 +287,14 @@ export class UIScene extends Phaser.Scene {
     if (this.column) {
       this.drawColumn();
       this.drawBar();
+      // New market sizes or marks re-letter the banners and the scale.
+      if (next.tvl !== undefined) this.raiseBanners();
     }
+  }
+
+  /** The world's scale changed under the interface: letter it again. */
+  relabelAxis() {
+    if (this.column) this.raiseBanners();
   }
 
   /* ── layout ───────────────────────────────────────────────────────── */
@@ -428,6 +476,7 @@ export class UIScene extends Phaser.Scene {
       !s.scoutsBusy,
     );
     add(buttons[3]!, long ? "Survey plate" : "Plate", this.opts.actions.plate);
+    add(buttons[4]!, "The markets", this.opts.actions.markets);
 
     let y = feedTop;
     if (s.error) {

@@ -46,6 +46,29 @@ The data path, in `src/graph/`:
 - `reduce` folds the legs into one basket per deployment: charted-asset
   collateral and debt, everything else held constant, and the rates.
 
+## The second question, in the same shape
+
+The first query asks what one address holds. The second, `Markets` in
+`src/graph/query.ts`, asks what each market *is*: how much is in it, how much
+is borrowed, at what threshold it liquidates, how far a fresh borrower may
+lever, and what it pays. It goes to the same seven deployments through the
+same fan-out (`src/graph/markets.ts`, `/api/markets`), and it names no
+protocol either. That is what lets a holdfast's plaque be filled from the same
+fields whichever seat it is.
+
+Three things on screen come from it:
+
+- **The markets** window (the wide button in the column): one row per
+  deployment, every column from the one query, with the block each was read
+  at.
+- **Sizes on the banners**: each holdfast's banner carries the size of that
+  deployment's market in the charted asset.
+- **High-water marks on the scale**: one flag per deployment at the price
+  where a borrower who opened at the maximum LTV today is liquidated. The
+  arithmetic is one line for all of them: today's price × max LTV ÷
+  liquidation threshold. A fresh maximum-leverage position stands on that
+  cliff, and the flags show how far apart the seven cliffs are.
+
 ## On screen
 
 **The door.** A landing scene: the same terrain the survey draws, drifting
@@ -319,7 +342,7 @@ registry row.
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
-| `npm test` | the full suite, 157 tests |
+| `npm test` | the full suite, 161 tests |
 | `npm run gate` | measure the terrain and fail on a flat map |
 | `npm run typecheck` | types |
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
@@ -353,7 +376,7 @@ with borders before connecting your own wallet:
 | Path | What lives there |
 |---|---|
 | `src/core` | the kernel, liquidation prices, the bracket, wallet shape, fixtures |
-| `src/graph` | the one query, the gateway fan-out, normalisation, reduction to baskets |
+| `src/graph` | the two queries, the gateway fan-out, normalisation, reduction to baskets, the markets |
 | `src/registry` | the deployments, all one schema, and their verification |
 | `src/survey` | the survey itself, shared by the free route and the paid one |
 | `src/x402` | the price schedule and the payment gate |

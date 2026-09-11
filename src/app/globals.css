@@ -345,3 +345,39 @@ html, body {
 .scree-terminal::placeholder { color: rgba(53, 224, 232, 0.35); }
 .scree-terminal:focus { box-shadow: inset 0 3px 0 #05101a, 0 0 0 1px #35e0e8; }
 .scree-terminal:disabled { color: rgba(223, 238, 242, 0.5); }
+
+/* The markets sheet: a wide table on a parchment window; scrolls sideways on a phone. */
+.markets-window { width: min(980px, 100%); }
+.markets-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.markets-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: #2b2418;
+}
+.markets-table th,
+.markets-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #c9b98f;
+  text-align: left;
+  white-space: nowrap;
+}
+.markets-table th {
+  font-family: var(--font-pixel), monospace;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  color: #5c4f36;
+  border-bottom: 2px solid #9c8757;
+}
+.markets-table .num { text-align: right; }
+.markets-table .id { font-family: var(--serif); font-size: 14px; }
+.markets-table .dim { color: #8a7b5a; }
+.markets-table .cliff { color: #b3471f; font-weight: 600; }
+.markets-error { margin: 0 0 10px; font-family: var(--mono); font-size: 12.5px; color: #b3471f; }
+.markets-foot { margin: 12px 0 0; font-size: 12.5px; }
+.markets-foot code { font-family: var(--mono); font-size: 11.5px; }
+@media (max-width: 600px) {
+  .markets-table { font-size: 11.5px; }
+  .markets-table th, .markets-table td { padding: 6px 6px; }
+}

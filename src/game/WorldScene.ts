@@ -20,6 +20,21 @@ export interface PriceTick {
   fx: number;
 }
 
+/**
+ * A high-water mark on the scale: the price at which a borrower who opened
+ * at a deployment's maximum LTV today is liquidated, one per deployment.
+ */
+export interface PriceMark {
+  deploymentId: string;
+  price: number;
+  fx: number;
+}
+
+/** A mark with the colour of the deployment's ground, for the interface to letter. */
+export interface PlacedMark extends PriceMark {
+  colour: number;
+}
+
 export interface ScoutPath {
   /** Fractions along price and dwell per step. */
   points: { fx: number; fy: number }[];
@@ -30,7 +45,7 @@ export interface WorldData {
   grid: TerrainGrid;
   /** The book's reading at a point, supplied by the owner of the arithmetic. */
   readAt: (fx: number, fy: number) => ZoneReading;
-  axis: { ticks: PriceTick[] };
+  axis: { ticks: PriceTick[]; marks?: PriceMark[] };
   ui: UIData;
 }
 
@@ -127,6 +142,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** The scale under the map, for the interface. */
+  /** The high-water marks on the scale, coloured by the ground they belong to. */
+  get axisMarks(): readonly PlacedMark[] {
+    return this.marks;
+  }
+
   get axisTicks(): readonly PriceTick[] {
     return this.opts.axis.ticks;
   }
@@ -141,6 +161,8 @@ export class WorldScene extends Phaser.Scene {
 
   /** A restart (a new book) begins from nothing: every list the last run filled is emptied here. */
   init(data: WorldData) {
+    this.marks = [];
+    this.axisGfx = undefined;
     this.opts = data;
     this.monsters = [];
     this.stirred = new Set();
@@ -170,6 +192,7 @@ export class WorldScene extends Phaser.Scene {
     this.drawAxis();
     this.raiseFaults();
     this.raiseHoldfasts();
+    if (this.opts.axis.marks) this.setAxisMarks(this.opts.axis.marks);
     this.placeSurveyor();
     this.scatterClutter();
     this.spawnLeviathans();
@@ -186,6 +209,9 @@ export class WorldScene extends Phaser.Scene {
   private ySort(y: number): number {
     return DEPTH.ground + Phaser.Math.Clamp(y / this.worldH, 0, 0.999) * 4;
   }
+
+  private marks: PlacedMark[] = [];
+  private axisGfx: Phaser.GameObjects.Graphics | undefined;
 
   private key(tx: number, ty: number): string {
     return `${tx},${ty}`;
@@ -211,8 +237,19 @@ export class WorldScene extends Phaser.Scene {
   /* ── the scale ────────────────────────────────────────────────────── */
 
   /** The price scale under the map: the survey's paper margin, ruled and ticked. Labels are the interface's. */
+  /** Set (or replace) the high-water marks and redraw the scale; the interface letters them. */
+  setAxisMarks(marks: readonly PriceMark[]) {
+    this.marks = marks.map((m) => ({
+      ...m,
+      colour: this.holdfasts.find((a) => a.deploymentId === m.deploymentId)?.colour ?? T.vellumInkDim,
+    }));
+    this.drawAxis();
+  }
+
   private drawAxis() {
+    this.axisGfx?.destroy();
     const g = this.add.graphics().setDepth(DEPTH.axis);
+    this.axisGfx = g;
     g.fillStyle(T.vellum, 1);
     g.fillRect(0, this.worldH, this.worldW, AXIS_H);
     g.fillStyle(T.vellumEdge, 1);
@@ -224,6 +261,18 @@ export class WorldScene extends Phaser.Scene {
       g.fillRect(x - SCALE * 0.5, this.worldH + SCALE * 2, SCALE, SCALE * 6);
     }
     for (let x = 0; x < this.worldW; x += TILE_PX) g.fillRect(x, this.worldH + SCALE * 2, SCALE * 0.5, SCALE * 2.5);
+    // The high-water marks: a flag on a pole in the ground's colour, planted on the scale.
+    for (const m of this.marks) {
+      if (m.fx < 0 || m.fx > 1) continue;
+      const x = m.fx * this.worldW;
+      const top = this.worldH + SCALE * 3;
+      g.fillStyle(T.vellumInk, 1);
+      g.fillRect(x - SCALE * 0.5, top, SCALE, SCALE * 14);
+      g.fillStyle(m.colour, 1);
+      g.fillRect(x + SCALE * 0.5, top, SCALE * 6, SCALE * 4);
+      g.fillStyle(T.vellumInk, 1);
+      g.fillRect(x + SCALE * 0.5, top + SCALE * 4, SCALE * 6, SCALE * 0.5);
+    }
   }
 
   /* ── borders ──────────────────────────────────────────────────────── */

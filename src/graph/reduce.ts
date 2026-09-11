@@ -48,7 +48,7 @@ export const ETH: ChartedAsset = {
   ],
 };
 
-function isCharted(market: Market, asset: ChartedAsset): boolean {
+export function isCharted(market: Market, asset: ChartedAsset): boolean {
   const addr = market.token.address.toLowerCase();
   if (asset.addresses.some((a) => a.toLowerCase() === addr)) return true;
   return asset.symbols.some((s) => s.toLowerCase() === market.token.symbol.toLowerCase());

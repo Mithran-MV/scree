@@ -11,7 +11,9 @@ import { extractFeatures } from "@/field/features";
 import { walkPaths } from "@/sim/paths";
 import { bandOf, buildTerrainGrid, mapFxOf, surveyWindow, warpFx } from "@/game/terrain";
 import type { ZoneReading } from "@/game/events";
-import type { PriceTick, ScoutPath, WorldData, WorldScene } from "@/game/WorldScene";
+import type { PriceMark, PriceTick, ScoutPath, WorldData, WorldScene } from "@/game/WorldScene";
+import { cliffPrice } from "@/graph/markets";
+import type { MarketsPayload } from "./MarketsWindow";
 import type { FeedRow, PushedState, TerraceChart, UIData, UIScene } from "@/game/UIScene";
 import type { LandingScene } from "@/game/LandingScene";
 import { doorLayout, layoutFor } from "@/game/layout";
@@ -44,6 +46,9 @@ interface Props {
   wallet: string | null;
   onReference: () => void;
   onPlate: () => void;
+  /** The second query's answer, for the marks on the scale and the sizes on the banners. */
+  markets: MarketsPayload | null;
+  onMarkets: () => void;
 }
 
 /** A defence terrace: a price band × dwell band the user raises by `liftHF`. */
@@ -147,6 +152,26 @@ export function ScreeGame(props: Props) {
     return out;
   }, [win, axes]);
 
+  /* ── the high-water marks: one flag per deployment on the scale ──── */
+
+  const marks = useMemo<PriceMark[]>(() => {
+    if (!props.markets) return [];
+    const out: PriceMark[] = [];
+    for (const d of props.markets.deployments) {
+      if (!d.charted) continue;
+      const price = cliffPrice(spot, d.charted.maximumLTV, d.charted.liquidationThreshold);
+      if (price === null) continue;
+      out.push({ deploymentId: d.deploymentId, price, fx: mapFxOf(axes.fxOf(price), 0) });
+    }
+    return out;
+  }, [props.markets, spot, axes]);
+
+  const tvl = useMemo<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    for (const d of props.markets?.deployments ?? []) if (d.charted) out[d.deploymentId] = d.charted.tvlUSD;
+    return out;
+  }, [props.markets]);
+
   /* ── the terrace: the user's defence, drawn in the reading panel ── */
 
   const terraces = useMemo<Terrace[]>(() => {
@@ -230,8 +255,9 @@ export function ScreeGame(props: Props) {
       feed,
       chart,
       notes,
+      tvl,
     }),
-    [props.label, props.busy, props.error, props.wallet, feed, chart, notes, spot],
+    [props.label, props.busy, props.error, props.wallet, feed, chart, notes, tvl, spot],
   );
   const pushedRef = useRef(pushed);
   useEffect(() => {
@@ -272,12 +298,20 @@ export function ScreeGame(props: Props) {
   useEffect(() => {
     const ui = uiRef2.current;
     if (!ui) return;
-    const data: WorldData = { grid, readAt, axis: { ticks }, ui };
+    const data: WorldData = { grid, readAt, axis: { ticks, marks }, ui };
     const first = worldDataRef.current === null;
     worldDataRef.current = data;
     // A new book while the survey is open: the world starts again on it.
     if (!first && worldRef.current?.scene.isActive()) worldRef.current.scene.restart(data);
-  }, [grid, readAt, ticks]);
+  }, [grid, readAt, ticks, marks]);
+
+  // Marks arrive after the world is up, and move with spot: plant them and re-letter the scale.
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!world || !world.scene.isActive()) return;
+    world.setAxisMarks(marks);
+    uiRef.current?.relabelAxis();
+  }, [marks]);
 
   /* ── mount, once ──────────────────────────────────────────────── */
 
@@ -287,6 +321,8 @@ export function ScreeGame(props: Props) {
   readAtRef.current = readAt;
   const ticksRef = useRef(ticks);
   ticksRef.current = ticks;
+  const marksRef = useRef(marks);
+  marksRef.current = marks;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -323,10 +359,11 @@ export function ScreeGame(props: Props) {
           reference: () => propsRef.current.onReference(),
           scouts: () => sendScoutsRef.current(),
           plate: () => propsRef.current.onPlate(),
+          markets: () => propsRef.current.onMarkets(),
         },
       };
       uiRef2.current = ui;
-      worldDataRef.current = { grid: gridRef.current, readAt: readAtRef.current, axis: { ticks: ticksRef.current }, ui };
+      worldDataRef.current = { grid: gridRef.current, readAt: readAtRef.current, axis: { ticks: ticksRef.current, marks: marksRef.current }, ui };
 
       const landing = new LandingScene();
       const world = new WorldScene();

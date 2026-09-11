@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { TerrainMap } from "@/components/TerrainMap";
 import type { Sources } from "@/components/ScreeGame";
+import { MarketsWindow, type MarketsPayload } from "@/components/MarketsWindow";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import type { Basket } from "@/core/types";
 
@@ -36,15 +37,40 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [plate, setPlate] = useState(false);
+  const [marketsOpen, setMarketsOpen] = useState(false);
+  const [markets, setMarkets] = useState<MarketsPayload | null>(null);
+  const [marketsError, setMarketsError] = useState<string | null>(null);
+
+  // The second query, asked once at the door and again whenever the sheet is opened after a while.
+  const loadMarkets = useCallback(async () => {
+    try {
+      const res = await fetch("/api/markets");
+      const body = (await res.json()) as MarketsPayload & { error?: string };
+      if (!res.ok) {
+        setMarketsError(body.error ?? `request failed with ${res.status}`);
+        return;
+      }
+      setMarkets(body);
+      setMarketsError(null);
+    } catch (err) {
+      setMarketsError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+  useEffect(() => {
+    void loadMarkets();
+  }, [loadMarkets]);
 
   useEffect(() => {
-    if (!plate) return;
+    if (!plate && !marketsOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPlate(false);
+      if (e.key === "Escape") {
+        setPlate(false);
+        setMarketsOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [plate]);
+  }, [plate, marketsOpen]);
 
   const loadAddress = useCallback(async (raw: string) => {
     const target = raw.trim();
@@ -149,7 +175,14 @@ export default function Page() {
           setError(null);
         }}
         onPlate={() => setPlate(true)}
+        markets={markets}
+        onMarkets={() => {
+          setMarketsOpen(true);
+          if (!markets || Date.now() - Date.parse(markets.readAt) > 120_000) void loadMarkets();
+        }}
       />
+
+      {marketsOpen && <MarketsWindow markets={markets} spot={loaded.spot} error={marketsError} onClose={() => setMarketsOpen(false)} />}
 
       {plate && (
         <div className="plate-overlay" onClick={() => setPlate(false)} role="dialog" aria-label="Survey plate">
