@@ -16,6 +16,8 @@ const hbar = (tinybar: string) => {
   return Number.isFinite(n) ? `${(n / 1e8).toFixed(3)} HBAR` : tinybar;
 };
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+/** A settlement id is `payer@seconds.nanos`; the nanos are kept for the link and the hover, not the column. */
+const shortTx = (t: string) => (t.length > 26 ? `${t.slice(0, 22)}…` : t);
 /** uaid:aid:3fK…;uid=0.0.1;registry=scree;… → scree · 3fK…9 */
 const agentLabel = (id: string) => {
   const m = /^uaid:aid:([^;]+);(.*)$/.exec(id);
@@ -102,8 +104,8 @@ export function ReceiptsWindow({ trail, error, onClose }: Props) {
                     <td>{e.payer ?? "—"}</td>
                     <td className="dim" title={e.agent ?? ""}>{e.agent ? agentLabel(e.agent) : "—"}</td>
                     <td>
-                      <a href={e.links.transaction} target="_blank" rel="noreferrer">
-                        {e.transaction}
+                      <a href={e.links.transaction} target="_blank" rel="noreferrer" title={e.transaction}>
+                        {shortTx(e.transaction)}
                       </a>
                     </td>
                     <td className="dim">{e.bodySha256.slice(0, 12)}…</td>

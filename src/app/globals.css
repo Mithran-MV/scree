@@ -347,7 +347,7 @@ html, body {
 .scree-terminal:disabled { color: rgba(223, 238, 242, 0.5); }
 
 /* The markets sheet: a wide table on a parchment window; scrolls sideways on a phone. */
-.markets-window { width: min(980px, 100%); }
+.markets-window { width: min(1200px, 100%); }
 .markets-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .markets-table {
   width: 100%;

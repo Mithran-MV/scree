@@ -84,11 +84,16 @@ export class LandingScene extends Phaser.Scene {
     this.cinematicPan();
 
     this.layout();
-    this.scale.on("resize", () => {
+    const onResize = () => {
       this.lens.setSize(this.scale.width, this.scale.height);
       this.cinematicPan();
       this.layout();
-    }, this);
+    };
+    this.scale.on("resize", onResize);
+    // The door is shut down when the world starts. A listener left behind
+    // would run on a dead scene at the next resize and stop every listener
+    // after it, the world's and the interface's among them.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off("resize", onResize));
 
     this.cameras.main.fadeIn(600, 8, 24, 32);
     this.lens.fadeIn(600, 8, 24, 32);

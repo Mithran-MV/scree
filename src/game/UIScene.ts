@@ -58,6 +58,9 @@ export interface UIState {
 /** What the page pushes in. The interface keeps its own flags. */
 export type PushedState = Omit<UIState, "scoutsBusy">;
 
+/** A handler for one of the world's events; `never` lets each take its own payload. */
+type Listener = (payload: never) => void;
+
 export interface UIData {
   fonts: { mono: string; serif: string; display: string; pixel: string };
   /** The current state, pulled once at create; pushed afterwards with setState. */
@@ -160,29 +163,44 @@ export class UIScene extends Phaser.Scene {
 
     this.layout();
     this.raiseBanners();
-    this.scale.on("resize", () => this.layout(), this);
+    const onResize = () => this.layout();
+    this.scale.on("resize", onResize);
 
+    // The world restarts with every new survey and launches this scene again,
+    // so create() runs once per survey seen. Whatever it listens for is
+    // forgotten at shutdown; otherwise each arrival would be logged once per
+    // survey and the resize handlers would pile up.
     const ev = this.world.events;
-    ev.on(EV.zoneHover, (r: ZoneReading) => this.showZone(r));
-    ev.on(EV.citadelHover, (c: CitadelHover) => (c.entered ? this.showCitadel(c) : this.showIdle()));
-    ev.on(EV.hoverEnd, () => this.showIdle());
-    ev.on(EV.monsterHover, (m: MonsterEvent) => (m.entered ? this.showMonster(m, false) : this.hidePopup()));
-    ev.on(EV.monsterClick, (m: MonsterEvent) => {
+    const listening: Array<[string, Listener]> = [];
+    const on = (name: string, fn: Listener) => {
+      ev.on(name, fn);
+      listening.push([name, fn]);
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off("resize", onResize);
+      for (const [name, fn] of listening) ev.off(name, fn);
+    });
+
+    on(EV.zoneHover, (r: ZoneReading) => this.showZone(r));
+    on(EV.citadelHover, (c: CitadelHover) => (c.entered ? this.showCitadel(c) : this.showIdle()));
+    on(EV.hoverEnd, () => this.showIdle());
+    on(EV.monsterHover, (m: MonsterEvent) => (m.entered ? this.showMonster(m, false) : this.hidePopup()));
+    on(EV.monsterClick, (m: MonsterEvent) => {
       this.showMonster(m, true);
       this.note(`${m.name}: ${m.warning}`);
     });
-    ev.on(EV.welcome, (w: WelcomeEvent) => this.showWelcome(w));
-    ev.on(EV.arrive, (r: ArriveEvent) =>
+    on(EV.welcome, (w: WelcomeEvent) => this.showWelcome(w));
+    on(EV.arrive, (r: ArriveEvent) =>
       this.note(
         r.drowned
           ? `Drowned at ${usd(r.price)}, held ${days(r.dwellDays)}. ${r.deploymentId ?? "The ground"} takes the book.`
           : `Stood at ${usd(r.price)}, held ${days(r.dwellDays)}: health ${r.hf.toFixed(3)}.`,
       ),
     );
-    ev.on(EV.guardian, (g: GuardianEvent) =>
+    on(EV.guardian, (g: GuardianEvent) =>
       this.note(`The ${g.name} stirs in ${g.reading.deploymentId ?? "open"} water, ${usd(g.reading.price)} deep: ${g.warning}`),
     );
-    ev.on(EV.scouts, (s: ScoutsEvent) => {
+    on(EV.scouts, (s: ScoutsEvent) => {
       this.state.scoutsBusy = false;
       const pct = ((s.survived / s.total) * 100).toFixed(1);
       this.note(`${s.survived} of ${s.total} scouts returned: ${pct}% survive from here.`);
@@ -392,7 +410,7 @@ export class UIScene extends Phaser.Scene {
       ? label(this, pad, pad + block + 6, this.state.chart.note, { size: TYPE.caption, font: f.mono, color: T.vellumInk, wrap: w - pad * 2 })
       : null;
     const h = pad + block + (caption ? 6 + caption.height : 0) + pad - 2;
-    this.hover.setPosition(v.x + inset, v.y + v.h - inset - h);
+    this.hover.setPosition(v.x + inset, this.hoverBottom(v, h, inset) - h);
     const parts: Phaser.GameObjects.GameObject[] = [nine(this, UI.panel, 0, 0, w, h), t, b];
     if (caption) parts.push(caption);
     if (withChart) parts.push(...this.miniChart(pad + textW + 12, pad, chartW, chartH));
@@ -604,6 +622,22 @@ export class UIScene extends Phaser.Scene {
       `${who}${r.exposure ? ` · ${r.exposure}` : ""}${r.drowned ? " · DROWNED" : ""}`,
       `${usd(r.price)} · held ${days(r.dwellDays)} · health ${r.hf.toFixed(3)}. ${threshold}`,
     );
+  }
+
+  /**
+   * Where the reading panel's bottom edge goes: just above the price scale
+   * when the scale is on screen with room for the panel over it, so the
+   * scale's marks and their labels are never covered; else the viewport's
+   * bottom.
+   */
+  private hoverBottom(v: Rect, h: number, inset: number): number {
+    const floor = v.y + v.h - inset;
+    const cam = this.world?.cameras?.main;
+    if (!cam) return floor;
+    const { D } = logical(this);
+    const axisTop = (cam.y + (this.world.worldHeight - cam.worldView.y) * cam.zoom) / D;
+    const above = axisTop - 6;
+    return above < floor && above - h > v.y + 48 ? above : floor;
   }
 
   private showCitadel(c: CitadelHover) {

@@ -572,6 +572,7 @@ export class WorldScene extends Phaser.Scene {
     cam.setZoom(this.fitZoom());
     fit();
     this.scale.on("resize", fit, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off("resize", fit, this));
     cam.centerOn(this.surveyor.x, this.surveyor.y - this.followOffset());
     cam.startFollow(this.surveyor, true, 0.05, 0.05, 0, this.followOffset());
   }
