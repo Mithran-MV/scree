@@ -42,7 +42,7 @@ export interface Layout {
   /** The console the page lays its real address input on. */
   slot: Rect;
   survey: Rect;
-  /** Wallet, reference book, scouts, plate, then the markets across the full width. */
+  /** Wallet, reference book, scouts, plate, then the markets and the receipts. */
   buttons: Rect[];
   buttonLabels: "long" | "short";
   /** Where the feed starts; its height follows its rows. */
@@ -87,7 +87,8 @@ export function layoutFor(W: number, H: number): Layout {
     const bw = Math.floor((cw - 16 - gap * 3) / 4);
     for (let i = 0; i < 4; i++) buttons.push({ x: x0 + 8 + i * (bw + gap), y, w: bw, h: 28 });
     y += 34;
-    buttons.push({ x: x0 + 8, y, w: cw - 16, h: 28 });
+    const half2 = Math.floor((cw - 16 - gap) / 2);
+    buttons.push({ x: x0 + 8, y, w: half2, h: 28 }, { x: x0 + 8 + half2 + gap, y, w: half2, h: 28 });
     y += 34;
   } else {
     const half = Math.floor((cw - 24) / 2);
@@ -95,7 +96,7 @@ export function layoutFor(W: number, H: number): Layout {
     y += 34;
     buttons.push({ x: x0 + 8, y, w: half, h: 28 }, { x: x0 + 8 + half + 8, y, w: half, h: 28 });
     y += 34;
-    buttons.push({ x: x0 + 8, y, w: cw - 16, h: 28 });
+    buttons.push({ x: x0 + 8, y, w: half, h: 28 }, { x: x0 + 8 + half + 8, y, w: half, h: 28 });
     y += 38;
   }
 

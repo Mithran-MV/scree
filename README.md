@@ -213,8 +213,18 @@ on Hedera and metered by what it asks for.
    transaction, and the SHA-256 of the body exactly as it was sent. A buyer can
    hash what it received and find that digest on the public topic.
 
-The buyer in this repository is `scripts/scout.ts`, an agent with a budget in
-HBAR. It discovers the service from the manifest, refuses any request that
+The map is itself a buyer. When the platform has an agent account of its
+own, it does not read the survey from the inside: every survey a visitor
+makes on the site is bought from `/api/survey` by that account, the way any
+other agent buys it, and the settlement comes back with the reading. The
+feed shows `paid · 0.045 HBAR · settled`, the log names the transaction, and
+the **Receipts** window lists the topic read back through the mirror node,
+every row linked to the explorer. If the purchase cannot be made the survey
+is read directly and the reason is named, so the map is never blank because
+a payment rail was.
+
+The other buyer in this repository is `scripts/scout.ts`, an agent with a
+budget in HBAR. It discovers the service from the manifest, refuses any request that
 would exceed its budget or a price above the quote it expected, pays, prints
 the reading with the settlement link, and then reads the topic back until it
 finds the receipt for its own transaction and confirms the digest matches.
@@ -342,7 +352,7 @@ registry row.
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
-| `npm test` | the full suite, 161 tests |
+| `npm test` | the full suite, 164 tests |
 | `npm run gate` | measure the terrain and fail on a flat map |
 | `npm run typecheck` | types |
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
@@ -380,7 +390,7 @@ with borders before connecting your own wallet:
 | `src/registry` | the deployments, all one schema, and their verification |
 | `src/survey` | the survey itself, shared by the free route and the paid one |
 | `src/x402` | the price schedule and the payment gate |
-| `src/hedera` | receipts on the Consensus Service |
+| `src/hedera` | receipts on the Consensus Service, and the trail read back |
 | `cre` | the confidential workflow, its ledger contract, and the evidence of its runs |
 | `src/field` | the raster and its features |
 | `src/render` | contours, hachures and the survey plate |

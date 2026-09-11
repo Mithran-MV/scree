@@ -5,6 +5,8 @@ import dynamic from "next/dynamic";
 import { TerrainMap } from "@/components/TerrainMap";
 import type { Sources } from "@/components/ScreeGame";
 import { MarketsWindow, type MarketsPayload } from "@/components/MarketsWindow";
+import { ReceiptsWindow, type TrailPayload } from "@/components/ReceiptsWindow";
+import type { Payment } from "@/components/ScreeGame";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import type { Basket } from "@/core/types";
 
@@ -21,6 +23,8 @@ interface Loaded {
   label: string;
   sources: Sources;
   offAxisCollateralUSD: number;
+  /** How this survey was bought, when the platform bought it. */
+  payment: Payment | null;
 }
 
 const DEMO: Loaded = {
@@ -29,6 +33,7 @@ const DEMO: Loaded = {
   label: "reference carry book",
   sources: { asked: [], healthy: [], notes: [] },
   offAxisCollateralUSD: 0.153 * 110_000,
+  payment: null,
 };
 
 export default function Page() {
@@ -38,6 +43,24 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [plate, setPlate] = useState(false);
   const [marketsOpen, setMarketsOpen] = useState(false);
+  const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [trail, setTrail] = useState<TrailPayload | null>(null);
+  const [trailError, setTrailError] = useState<string | null>(null);
+
+  const loadTrail = useCallback(async () => {
+    try {
+      const res = await fetch("/api/receipts?limit=30");
+      const body = (await res.json()) as TrailPayload & { error?: string };
+      if (!res.ok) {
+        setTrailError(body.error ?? `request failed with ${res.status}`);
+        return;
+      }
+      setTrail(body);
+      setTrailError(null);
+    } catch (err) {
+      setTrailError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
   const [markets, setMarkets] = useState<MarketsPayload | null>(null);
   const [marketsError, setMarketsError] = useState<string | null>(null);
 
@@ -61,16 +84,17 @@ export default function Page() {
   }, [loadMarkets]);
 
   useEffect(() => {
-    if (!plate && !marketsOpen) return;
+    if (!plate && !marketsOpen && !receiptsOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setPlate(false);
         setMarketsOpen(false);
+        setReceiptsOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [plate, marketsOpen]);
+  }, [plate, marketsOpen, receiptsOpen]);
 
   const loadAddress = useCallback(async (raw: string) => {
     const target = raw.trim();
@@ -103,6 +127,7 @@ export default function Page() {
           notes: [...(body.failed ?? []), ...(body.excluded ?? [])],
         },
         offAxisCollateralUSD: body.offAxisCollateralUSD ?? 0,
+        payment: body.payment ?? null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -180,7 +205,14 @@ export default function Page() {
           setMarketsOpen(true);
           if (!markets || Date.now() - Date.parse(markets.readAt) > 120_000) void loadMarkets();
         }}
+        payment={loaded.payment}
+        onReceipts={() => {
+          setReceiptsOpen(true);
+          void loadTrail();
+        }}
       />
+
+      {receiptsOpen && <ReceiptsWindow trail={trail} error={trailError} onClose={() => setReceiptsOpen(false)} />}
 
       {marketsOpen && <MarketsWindow markets={markets} spot={loaded.spot} error={marketsError} onClose={() => setMarketsOpen(false)} />}
 

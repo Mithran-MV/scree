@@ -69,6 +69,7 @@ export interface UIData {
     scouts: () => void;
     plate: () => void;
     markets: () => void;
+    receipts: () => void;
   };
 }
 
@@ -477,6 +478,7 @@ export class UIScene extends Phaser.Scene {
     );
     add(buttons[3]!, long ? "Survey plate" : "Plate", this.opts.actions.plate);
     add(buttons[4]!, "The markets", this.opts.actions.markets);
+    add(buttons[5]!, "Receipts", this.opts.actions.receipts);
 
     let y = feedTop;
     if (s.error) {

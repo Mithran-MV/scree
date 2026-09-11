@@ -19,6 +19,17 @@ import type { LandingScene } from "@/game/LandingScene";
 import { doorLayout, layoutFor } from "@/game/layout";
 import { DPR_KEY, dprOf } from "@/game/screen";
 
+/** How a survey was bought, as the terrain route reports it when the platform paid. */
+export interface Payment {
+  paidHbar: string;
+  payer: string;
+  payTo: string;
+  transaction: string;
+  network: string;
+  tookMs: number;
+  links: { transaction: string; topic: string | null };
+}
+
 export interface Sources {
   /** Deployments the survey asked, in registry order. Empty for the reference book. */
   asked: string[];
@@ -49,6 +60,8 @@ interface Props {
   /** The second query's answer, for the marks on the scale and the sizes on the banners. */
   markets: MarketsPayload | null;
   onMarkets: () => void;
+  payment: Payment | null;
+  onReceipts: () => void;
 }
 
 /** A defence terrace: a price band × dwell band the user raises by `liftHF`. */
@@ -225,6 +238,7 @@ export function ScreeGame(props: Props) {
           : "reference book",
         ...(sources.notes.length ? { tone: "peril" as const } : {}),
       },
+      ...(props.payment ? [{ key: "paid", value: `${props.payment.paidHbar} HBAR · settled`, tone: "ley" as const }] : []),
       { key: "health today", value: healthToday.toFixed(3), tone: "ley" },
       { key: "crash liquidation", value: usd(br.lower), tone: "peril" },
       { key: "pump liquidation", value: usd(br.upper), tone: "peril" },
@@ -235,13 +249,18 @@ export function ScreeGame(props: Props) {
       { key: "passes", value: features.boundaryPass ? "1" : "0", tone: "ley" },
       { key: "rises with price", value: `${(features.monoFraction * 100).toFixed(1)}%` },
     ],
-    [spot, sources, healthToday, br, shape, grid.zones.length, features],
+    [spot, sources, props.payment, healthToday, br, shape, grid.zones.length, features],
   );
 
-  const notes = useMemo(
-    () => sources.notes.map((n) => `${n.deploymentId}: ${n.reason}`),
-    [sources],
-  );
+  const notes = useMemo(() => {
+    const lines = sources.notes.map((n) => `${n.deploymentId}: ${n.reason}`);
+    if (props.payment) {
+      lines.unshift(
+        `Bought this survey for ${props.payment.paidHbar} HBAR from ${props.payment.payer}: settled on Hedera as ${props.payment.transaction}, receipt on the topic. Open Receipts for the links.`,
+      );
+    }
+    return lines;
+  }, [sources, props.payment]);
 
   /* ── state pushed to the interface ────────────────────────────── */
 
@@ -360,6 +379,7 @@ export function ScreeGame(props: Props) {
           scouts: () => sendScoutsRef.current(),
           plate: () => propsRef.current.onPlate(),
           markets: () => propsRef.current.onMarkets(),
+          receipts: () => propsRef.current.onReceipts(),
         },
       };
       uiRef2.current = ui;
