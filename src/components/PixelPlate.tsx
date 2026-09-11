@@ -44,7 +44,8 @@ const hexCss = (n: number): string => `#${n.toString(16).padStart(6, "0")}`;
 export function PixelPlate({ baskets, spot, onHover }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [hover, setHover] = useState<{ reading: PlateReading; tx: number; ty: number; px: number; py: number } | null>(null);
+  /** The reading, the tile, the pointer in the plate's frame, and where the canvas sits in that frame, so the marker lands on the tile. */
+  const [hover, setHover] = useState<{ reading: PlateReading; tx: number; ty: number; px: number; py: number; ox: number; oy: number; tile: number } | null>(null);
   const [scale, setScale] = useState(2);
   const [sprite, setSprite] = useState<HTMLImageElement | null>(null);
 
@@ -116,7 +117,16 @@ export function PixelPlate({ baskets, spot, onHover }: Props) {
       const zone = tile.owner >= 0 ? grid.zones[tile.owner] : undefined;
       const reading: PlateReading = { price, dwellDays, hf: s.z + 1, band: tile.lo, owner: zone?.deploymentId ?? null, exposure: zone?.exposure ?? null, binder: s.binder };
       const hostRect = host.getBoundingClientRect();
-      setHover({ reading, tx, ty, px: event.clientX - hostRect.left, py: event.clientY - hostRect.top });
+      setHover({
+        reading,
+        tx,
+        ty,
+        px: event.clientX - hostRect.left,
+        py: event.clientY - hostRect.top,
+        ox: rect.left - hostRect.left,
+        oy: rect.top - hostRect.top,
+        tile: rect.width / grid.cols,
+      });
       onHover?.(reading);
     },
     [baskets, grid, win, onHover],
@@ -127,7 +137,6 @@ export function PixelPlate({ baskets, spot, onHover }: Props) {
     onHover?.(null);
   }, [onHover]);
 
-  const tileCss = hover && canvasRef.current ? canvasRef.current.getBoundingClientRect().width / grid.cols : 0;
   const hostW = hostRef.current?.clientWidth ?? 0;
   const readingLeft = hover ? Math.min(Math.max(8, hover.px + 16), Math.max(8, hostW - 250)) : 0;
   const readingTop = hover ? Math.max(8, hover.py - 74) : 0;
@@ -135,8 +144,8 @@ export function PixelPlate({ baskets, spot, onHover }: Props) {
   return (
     <div className="pixel-plate" ref={hostRef}>
       <canvas ref={canvasRef} onMouseMove={move} onMouseLeave={leave} />
-      {hover && tileCss > 0 && (
-        <div className="pixel-cursor" style={{ left: 4 + hover.tx * tileCss, top: 4 + hover.ty * tileCss, width: tileCss, height: tileCss }} />
+      {hover && (
+        <div className="pixel-cursor" style={{ left: hover.ox + hover.tx * hover.tile, top: hover.oy + hover.ty * hover.tile, width: hover.tile, height: hover.tile }} />
       )}
       {hover && (
         <div className="pixel-reading" style={{ left: readingLeft, top: readingTop }}>
