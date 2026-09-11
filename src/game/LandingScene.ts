@@ -26,6 +26,8 @@ export interface LandingData {
    * phone keyboards all work. The door reads and writes it through this.
    */
   field: { get: () => string; set: (value: string) => void; disable: () => void };
+  /** Open the survey without a press: the page arrived with an address in its link. */
+  autoBegin?: boolean;
 }
 
 const DEPTH = { veil: 5, type: 10, console: 12 } as const;
@@ -90,6 +92,8 @@ export class LandingScene extends Phaser.Scene {
 
     this.cameras.main.fadeIn(600, 8, 24, 32);
     this.lens.fadeIn(600, 8, 24, 32);
+    // A link that names an address walks straight in; the door still shows for a beat so the fade reads.
+    if (this.opts.autoBegin) this.time.delayedCall(700, () => this.beginFromField());
   }
 
   /** A slow, endless drift across the ground: the camera's scroll is tweened and reversed, never cut. */

@@ -420,6 +420,10 @@ export function ScreeGame(props: Props) {
       uiRef2.current = ui;
       worldDataRef.current = { grid: gridRef.current, readAt: readAtRef.current, axis: { ticks: ticksRef.current, marks: marksRef.current }, ui };
 
+      // A link may carry the wallet: `?address=0x…` fills the door's field and walks in.
+      const linked = new URLSearchParams(window.location.search).get("address")?.trim() ?? "";
+      const linkedAddress = /^0x[0-9a-fA-F]{40}$/.test(linked) ? linked : "";
+      if (linkedAddress && doorFieldRef.current) doorFieldRef.current.value = linkedAddress;
       const landing = new LandingScene();
       const world = new WorldScene();
       const uiScene = new UIScene();
@@ -461,6 +465,7 @@ export function ScreeGame(props: Props) {
           propsRef.current.onBegin(address);
         },
         connect: () => propsRef.current.connectWallet(),
+        autoBegin: Boolean(linkedAddress),
         field: {
           get: () => doorFieldRef.current?.value ?? "",
           set: (value: string) => {

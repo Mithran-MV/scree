@@ -241,7 +241,8 @@ manifest), `src/hedera/receipts.ts` (writing the topic), `src/hedera/trail.ts`
 
 ### Payment flow
 
-1. A buyer that has never seen the service reads `/api/survey/manifest`: the
+1. A buyer that has never seen the service reads `/api/survey/manifest`, or
+   the same document at `/.well-known/x402` if all it knows is the host: the
    endpoint, the rail (x402 `exact` scheme, HBAR on `hedera:testnet`, the
    service account it pays), the price schedule with a worked example, which
    deployments can be asked, and the topic where receipts are written.
@@ -449,8 +450,9 @@ registry row.
 | `npm run bake:sprites` | regenerate the baked sheets under `public/assets/scree/` |
 | `npm run build` | production build |
 
-Query parameters: `?sources=id,id` restricts the registry, so the difference
-one schema makes is reproducible by anyone.
+Query parameters: `?address=0x…` opens the survey on that wallet straight
+from the link, and `?sources=id,id` restricts the registry, so the difference
+one schema makes is reproducible by anyone from the address bar.
 
 The canvas is drawn at the screen's own pixel density and the pixel art is
 scaled up in-game, so type stays sharp on any display. On a phone the

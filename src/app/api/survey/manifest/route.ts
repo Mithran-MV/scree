@@ -24,6 +24,7 @@ export function GET() {
     {
       name: "Scree survey",
       version: 1,
+      wellKnown: `${base}/.well-known/x402`,
       description:
         "A liquidation survey of one address across standardized lending deployments: one query fanned out, minimised into baskets with today's price, wallet shape and per-source block heights.",
       endpoint: { method: "GET", url: `${base}/api/survey`, query: { address: "0x… (required)", sources: "comma-separated deployment ids (optional; default all verified)" } },
