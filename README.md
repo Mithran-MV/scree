@@ -31,7 +31,7 @@ the site, first from one deployment and then from all seven. Nothing in the
 code changed between the two pictures; only how many standardized answers
 were minimised.
 
-![One source: one territory, no folds](docs/one-source.png)
+![One source: one territory, no folds, the speaker in the corner](docs/one-source.png)
 
 `?sources=aave-v3-ethereum`: one territory, one coast, no borders. The feed
 says `1 of 1 answered`, `territories 1`, `ley-veins 0`.
@@ -146,11 +146,15 @@ thirty-day price walks from where the surveyor stands. The ones that cross the
 shoreline drown where they fall, sunk to the chest in the foam; the log reports
 how many came home.
 
+![Two hundred scouts marching out from the surveyor's ground on thirty-day price walks](docs/scouts.png)
+
 **The plate.** The survey drawn the way the world draws the ground, one click
 away: the same terrain grid painted tile by tile in the tileset's palette, the
 coast in foam, the borders as ley-lines, the pass, each holdfast as a keep with
 its banner, today's price where the surveyor stands, and the price and dwell
 scales. Under the pointer, a reading of the tile and what binds there.
+
+![The survey plate: the same ground as a pixel map, a reading under the pointer](docs/survey-plate.png)
 
 **Sound.** A slow theme at the door, a march for the survey, a quicker one
 while the scouts are out; footsteps as the surveyor walks; a sound for each
@@ -516,7 +520,7 @@ registry row.
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
-| `npm test` | the full suite, 179 tests |
+| `npm test` | the full suite, 184 tests |
 | `npm run gate` | measure the terrain and fail on a flat map |
 | `npm run typecheck` | types |
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
@@ -527,7 +531,8 @@ registry row.
 | `npm run hedera:credits` | issue the survey-credit token and fund the agent with it |
 | `npm run guardian:deploy` | compile and deploy the verdict ledger to Sepolia |
 | `npm run guardian:read` | read the ledger's latest verdict for a wallet |
-| `npm run bake:sprites` | regenerate the baked sheets under `public/assets/scree/` |
+| `npm run bake:sprites` | regenerate the baked sheets under `public/assets/scree/` and the site icon |
+| `npm run pictures -- <url> docs` | capture the pictures in this file from a running site with headless Chrome |
 | `npm run build` | production build |
 
 Query parameters: `?address=0x…` opens the survey on that wallet straight

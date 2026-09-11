@@ -22,7 +22,8 @@
     "dev": "next dev",
     "build": "NEXT_DIST_DIR=.next-build next build",
     "start": "NEXT_DIST_DIR=.next-build next start",
-    "bake:sprites": "tsx scripts/bake-sprites.ts"
+    "bake:sprites": "tsx scripts/bake-sprites.ts",
+    "pictures": "node scripts/capture-pictures.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

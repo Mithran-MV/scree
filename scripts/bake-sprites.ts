@@ -815,6 +815,57 @@ function bakeTopbar(): Pix {
   return p;
 }
 
+/* ── the icon ────────────────────────────────────────────────────────── */
+
+/** Nearest-neighbour enlargement: every source pixel becomes a k × k block. */
+function enlarge(src: Pix, k: number, margin = 0, fill: RGBA = CLEAR): Pix {
+  const out = new Pix(src.width * k + margin * 2, src.height * k + margin * 2);
+  if (fill[3] > 0) out.fill(0, 0, out.width, out.height, fill);
+  for (let y = 0; y < src.height; y++)
+    for (let x = 0; x < src.width; x++) {
+      const c = src.get(x, y);
+      if (c[3] > 0) out.fill(margin + x * k, margin + y * k, k, k, c);
+    }
+  return out;
+}
+
+/**
+ * The site's icon, sixteen pixels square: a peak with a snow cap over a
+ * green foot, the coast in foam, deep water under it, all inside the
+ * housing's bevel. The same thing the map is, at the size of a tab.
+ */
+function drawIcon(): Pix {
+  const p = new Pix(16, 16);
+  const deep = rgb(18, 44, 72);
+  const shelf = rgb(36, 116, 138);
+  const grass = rgb(118, 176, 96);
+  const grassDark = rgb(74, 122, 62);
+  p.fill(0, 0, 16, 16, P.shellDark);
+  p.rectOutline(0, 0, 16, 16, P.bevel);
+  // the sky is the housing; water fills the foot
+  p.fill(1, 12, 14, 3, deep);
+  p.fill(1, 11, 14, 1, shelf);
+  for (let x = 1; x < 15; x++) if (x % 2 === 0) p.put(x, 11, P.foam);
+  // green flanks
+  p.fill(1, 9, 14, 2, grass);
+  p.fill(1, 10, 14, 1, grassDark);
+  // the peak: rows widen from the summit; the right face in shade
+  const summit = 2;
+  for (let y = summit; y <= 9; y++) {
+    const half = y - summit;
+    for (let x = 8 - half; x <= 8 + half; x++) {
+      if (x < 1 || x > 14) continue;
+      const snow = y <= 4;
+      const shade = x > 8;
+      p.put(x, y, snow ? (shade ? P.snowShade : P.snow) : shade ? P.rockDark : P.rock);
+    }
+  }
+  p.put(8, summit - 1, P.snow);
+  // a ley vein down the seam of the two faces
+  for (let y = 6; y <= 10; y++) p.put(8 + (y % 2), y, P.ley);
+  return p;
+}
+
 /* ── run ─────────────────────────────────────────────────────────────── */
 
 console.log("baking sheets → public/assets/scree/");
@@ -830,4 +881,12 @@ save("ui-button.png", bakeButton());
 save("ui-topbar.png", bakeTopbar());
 save("ui-frame.png", bakeFrame());
 save("ui-bigbutton.png", bakeBigButton());
+{
+  // The favicon and the touch icon go where the app router looks for them.
+  const icon = drawIcon();
+  const app = join(ROOT, "src/app");
+  writeFileSync(join(app, "icon.png"), encodePng(enlarge(icon, 4).toImage()));
+  writeFileSync(join(app, "apple-icon.png"), encodePng(enlarge(icon, 11, 2, P.shellDark).toImage()));
+  console.log("  src/app/icon.png 64×64, src/app/apple-icon.png 180×180");
+}
 void scale;
