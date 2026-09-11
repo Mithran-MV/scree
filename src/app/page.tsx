@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { TerrainMap } from "@/components/TerrainMap";
 import type { Sources } from "@/components/ScreeGame";
@@ -37,13 +37,27 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [plate, setPlate] = useState(false);
 
+  useEffect(() => {
+    if (!plate) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPlate(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [plate]);
+
   const loadAddress = useCallback(async (raw: string) => {
     const target = raw.trim();
     if (!target) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/terrain?address=${encodeURIComponent(target)}`);
+      // `?sources=id,id` on the page restricts the registry, so the difference
+      // the standard makes can be reproduced by anyone from the address bar.
+      const sources = new URLSearchParams(window.location.search).get("sources");
+      const query = new URLSearchParams({ address: target });
+      if (sources) query.set("sources", sources);
+      const res = await fetch(`/api/terrain?${query.toString()}`);
       const body = await res.json();
       if (!res.ok) {
         setError(body.error ?? `request failed with ${res.status}`);
@@ -138,8 +152,21 @@ export default function Page() {
       />
 
       {plate && (
-        <div className="plate-overlay" onClick={() => setPlate(false)}>
-          <div onClick={(e) => e.stopPropagation()}>
+        <div className="plate-overlay" onClick={() => setPlate(false)} role="dialog" aria-label="Survey plate">
+          <div className="plate-window" onClick={(e) => e.stopPropagation()}>
+            <header className="plate-head">
+              <div>
+                <span className="plate-kicker">THE SURVEY PLATE</span>
+                <h2 className="plate-title">{loaded.label}</h2>
+              </div>
+              <button type="button" className="plate-close" onClick={() => setPlate(false)} aria-label="Close the plate">
+                ×
+              </button>
+            </header>
+            <p className="plate-note">
+              The same field as the map, drawn as the original hachured contour sheet: price west to east, dwell south to
+              north, the coast at sea level, the pass and the folds marked with their readings. Move over it to read a point.
+            </p>
             <TerrainMap baskets={loaded.baskets} spot={loaded.spot} onHover={() => {}} />
           </div>
         </div>

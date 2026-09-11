@@ -72,6 +72,13 @@ export interface ButtonOptions {
   font?: string | undefined;
 }
 
+function darken(colour: number, t: number): number {
+  const r = (colour >> 16) & 255;
+  const g = (colour >> 8) & 255;
+  const b = colour & 255;
+  return (Math.round(r * (1 - t)) << 16) | (Math.round(g * (1 - t)) << 8) | Math.round(b * (1 - t));
+}
+
 /** Multiply-tint for the grey button stock: the stock's 150-grey becomes ~60% of the tone. */
 function lighten(colour: number, t: number): number {
   const r = (colour >> 16) & 255;
@@ -99,6 +106,11 @@ export function button(scene: Phaser.Scene, x: number, y: number, text: string, 
   const container = scene.add.container(x, y, [face, t]);
   container.setSize(w, h);
   if (enabled) {
+    const labelY = t.y;
+    const rest = () => {
+      face.setTint(lighten(tone, 0.1));
+      t.setY(labelY);
+    };
     // The hit area is in the container's local space, whose origin is the
     // button's top-left corner: Rectangle takes a corner, not a centre.
     container.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
@@ -107,10 +119,17 @@ export function button(scene: Phaser.Scene, x: number, y: number, text: string, 
       scene.input.setDefaultCursor("pointer");
     });
     container.on("pointerout", () => {
-      face.setTint(lighten(tone, 0.1));
+      rest();
       scene.input.setDefaultCursor("default");
     });
-    container.on("pointerdown", () => options.onClick?.());
+    // A press is visible on its own, for a finger as much as a mouse: the face
+    // darkens and the label drops a pixel until the pointer lifts.
+    container.on("pointerdown", () => {
+      face.setTint(darken(tone, 0.25));
+      t.setY(labelY + 1);
+      options.onClick?.();
+    });
+    container.on("pointerup", rest);
   }
   return container;
 }

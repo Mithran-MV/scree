@@ -168,7 +168,17 @@ export class UIScene extends Phaser.Scene {
     );
     ev.on(EV.scouts, (s: ScoutsEvent) => {
       this.state.scoutsBusy = false;
-      this.note(`${s.survived} of ${s.total} scouts returned: ${((s.survived / s.total) * 100).toFixed(1)}% survive from here.`);
+      const pct = ((s.survived / s.total) * 100).toFixed(1);
+      this.note(`${s.survived} of ${s.total} scouts returned: ${pct}% survive from here.`);
+      const { map: v } = this.lay;
+      this.showPopup(
+        "THE SCOUTS ARE BACK",
+        `${s.survived} of ${s.total} came home. ${pct}% of thirty-day price walks from where the surveyor stands end on dry ground; the rest crossed the shore and drowned where they fell.`,
+        v.x + v.w / 2 - 140 - 18,
+        v.y + 96 - 18,
+        s.survived / s.total < 0.5 ? T.peril : T.ley,
+        8000,
+      );
     });
   }
 
@@ -404,6 +414,15 @@ export class UIScene extends Phaser.Scene {
       s.scoutsBusy ? (long ? "Scouts out…" : "Out…") : long ? "Send 200 scouts" : "Scouts",
       () => {
         this.setState({ scoutsBusy: true });
+        const { map: v } = this.lay;
+        this.showPopup(
+          "SCOUTS OUT",
+          "Two hundred scouts leave the surveyor's ground on thirty-day price walks. Watch the shore: the ones that cross it drown where they fall, and the count comes back to the log.",
+          v.x + v.w / 2 - 140 - 18,
+          v.y + 96 - 18,
+          T.ley,
+          3500,
+        );
         this.opts.actions.scouts();
       },
       !s.scoutsBusy,
