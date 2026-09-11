@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { UI, button, label, nine } from "./chrome";
+import { audio } from "./audio";
 import { loadUiStock } from "./assets";
 import { WebFontFile } from "./fonts";
 import { layoutFor, type Layout, type Rect } from "./layout";
@@ -189,10 +190,14 @@ export class UIScene extends Phaser.Scene {
     on(EV.hoverEnd, () => this.showIdle());
     on(EV.monsterHover, (m: MonsterEvent) => (m.entered ? this.showMonster(m, false) : this.hidePopup()));
     on(EV.monsterClick, (m: MonsterEvent) => {
+      audio.sfx("monster");
       this.showMonster(m, true);
       this.note(`${m.name}: ${m.warning}`);
     });
-    on(EV.welcome, (w: WelcomeEvent) => this.showWelcome(w));
+    on(EV.welcome, (w: WelcomeEvent) => {
+      audio.sfx("welcome");
+      this.showWelcome(w);
+    });
     on(EV.arrive, (r: ArriveEvent) =>
       this.note(
         r.drowned
@@ -200,12 +205,15 @@ export class UIScene extends Phaser.Scene {
           : `Stood at ${usd(r.price)}, held ${days(r.dwellDays)}: health ${r.hf.toFixed(3)}.`,
       ),
     );
-    on(EV.guardian, (g: GuardianEvent) =>
-      this.note(`The ${g.name} stirs in ${g.reading.deploymentId ?? "open"} water, ${usd(g.reading.price)} deep: ${g.warning}`),
-    );
+    on(EV.guardian, (g: GuardianEvent) => {
+      audio.sfx("guardian");
+      this.note(`The ${g.name} stirs in ${g.reading.deploymentId ?? "open"} water, ${usd(g.reading.price)} deep: ${g.warning}`);
+    });
     on(EV.scouts, (s: ScoutsEvent) => {
       this.state.scoutsBusy = false;
       const pct = ((s.survived / s.total) * 100).toFixed(1);
+      audio.music("survey");
+      audio.sfx(s.survived / s.total < 0.5 ? "lament" : "fanfare");
       this.note(`${s.survived} of ${s.total} scouts returned: ${pct}% survive from here.`);
       const { map: v } = this.lay;
       this.showPopup(
@@ -215,6 +223,7 @@ export class UIScene extends Phaser.Scene {
         v.y + 96 - 18,
         s.survived / s.total < 0.5 ? T.peril : T.ley,
         8000,
+        false,
       );
     });
   }
@@ -304,7 +313,10 @@ export class UIScene extends Phaser.Scene {
     // The page may push before the scene has started; the first state then comes through init.
     if (!this.state) return;
     const before = new Set(this.state.notes);
+    const wasBusy = this.state.busy;
     this.state = { ...this.state, ...next };
+    // A survey came back: a chime, or the buzz of a refusal.
+    if (wasBusy && !this.state.busy) audio.sfx(this.state.error ? "error" : "survey");
     for (const line of this.state.notes) {
       if (!before.has(line)) this.log = [line, ...this.log].slice(0, 8);
     }
@@ -347,8 +359,17 @@ export class UIScene extends Phaser.Scene {
     if (!compact) {
       this.bar.add(label(this, narrow ? 112 : 160, Math.round(topBar / 2) - 4, "LIQUIDATION TOPOGRAPHY", { size: TYPE.kicker, font: f.pixel, color: T.ley, tracking: 2, stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
     }
+    // The sound switch sits at the far right; the headline keeps clear of it.
+    const toggle = label(this, W - 14, Math.round(topBar / 2) - 4, audio.enabled ? "SOUND ON" : "SOUND OFF", { size: TYPE.kicker, font: f.pixel, color: audio.enabled ? T.ley : T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true });
+    toggle.setInteractive({ useHandCursor: true }).on("pointerdown", () => {
+      audio.setEnabled(!audio.enabled);
+      audio.sfx("press");
+      // The bar is redrawn after the event, not under the pointer that is still in it.
+      this.time.delayedCall(0, () => this.drawBar());
+    });
+    this.bar.add(toggle);
     const headline = narrow ? s.label : s.headline;
-    this.bar.add(label(this, W - 14, Math.round(topBar / 2) - 4, headline, { size: TYPE.kicker, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
+    this.bar.add(label(this, W - 14 - toggle.width - 16, Math.round(topBar / 2) - 4, headline, { size: TYPE.kicker, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
   }
 
   /** The bezel: housing around the map viewport under the bar, and the inset lines that make it read as glass. */
@@ -488,6 +509,8 @@ export class UIScene extends Phaser.Scene {
       s.scoutsBusy ? (long ? "Scouts out…" : "Out…") : long ? "Send 200 scouts" : "Scouts",
       () => {
         this.setState({ scoutsBusy: true });
+        audio.music("scouts");
+        audio.sfx("deploy");
         const { map: v } = this.lay;
         this.showPopup(
           "SCOUTS OUT",
@@ -496,6 +519,7 @@ export class UIScene extends Phaser.Scene {
           v.y + 96 - 18,
           T.ley,
           3500,
+          false,
         );
         this.opts.actions.scouts();
       },
@@ -559,7 +583,7 @@ export class UIScene extends Phaser.Scene {
    * nothing with a Back ease so it lands with a snap. `x, y` is where it
    * points at, in CSS pixels; the box is kept inside the map viewport.
    */
-  private showPopup(title: string, body: string, x: number, y: number, tone: number, pinMs: number) {
+  private showPopup(title: string, body: string, x: number, y: number, tone: number, pinMs: number, sound = true) {
     const { map: v } = this.lay;
     const f = this.opts.fonts;
     const w = Math.min(280, v.w - 24);
@@ -567,6 +591,7 @@ export class UIScene extends Phaser.Scene {
     this.popupTween?.destroy();
     this.popupTimer?.remove(false);
     this.popup.removeAll(true);
+    if (sound) audio.sfx("open");
 
     const t = label(this, 0, 0, title, { size: TYPE.kicker, font: f.pixel, color: tone, wrap: w - pad * 2, crisp: true });
     const b = label(this, 0, 0, body, { size: TYPE.body, font: f.serif, color: T.vellumInkDim, wrap: w - pad * 2 });
@@ -589,6 +614,7 @@ export class UIScene extends Phaser.Scene {
   private hidePopup(force = false) {
     if (!this.popup.visible) return;
     if (!force && this.popupPinnedUntil > this.time.now) return;
+    audio.sfx("close");
     this.popupTween?.destroy();
     this.popupTween = this.tweens.add({
       targets: this.popup,

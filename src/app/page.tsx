@@ -7,6 +7,7 @@ import type { Sources } from "@/components/ScreeGame";
 import { MarketsWindow, type MarketsPayload } from "@/components/MarketsWindow";
 import { ReceiptsWindow, type TrailPayload } from "@/components/ReceiptsWindow";
 import type { Guardian, Payment } from "@/components/ScreeGame";
+import { audio } from "@/game/audio";
 import { CARRY_BOOK, SPOT_ETH_USD } from "@/core/fixtures/carry-book";
 import type { Basket } from "@/core/types";
 
@@ -52,6 +53,10 @@ export default function Page() {
   const [plate, setPlate] = useState(false);
   const [marketsOpen, setMarketsOpen] = useState(false);
   const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const closePlate = useCallback(() => {
+    setPlate(false);
+    audio.sfx("close");
+  }, []);
   const [guardian, setGuardian] = useState<Guardian | null>(null);
 
   // The enclave's verdict for the surveyed wallet, read back from the ledger.
@@ -121,6 +126,7 @@ export default function Page() {
         setPlate(false);
         setMarketsOpen(false);
         setReceiptsOpen(false);
+        audio.sfx("close");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -233,10 +239,14 @@ export default function Page() {
           setLoaded(DEMO);
           setError(null);
         }}
-        onPlate={() => setPlate(true)}
+        onPlate={() => {
+          setPlate(true);
+          audio.sfx("open");
+        }}
         markets={markets}
         onMarkets={() => {
           setMarketsOpen(true);
+          audio.sfx("open");
           if (!markets || Date.now() - Date.parse(markets.readAt) > 120_000) void loadMarkets();
         }}
         payment={loaded.payment}
@@ -245,23 +255,30 @@ export default function Page() {
         spotSource={loaded.spotSource}
         onReceipts={() => {
           setReceiptsOpen(true);
+          audio.sfx("open");
           void loadTrail();
         }}
       />
 
-      {receiptsOpen && <ReceiptsWindow trail={trail} error={trailError} onClose={() => setReceiptsOpen(false)} />}
+      {receiptsOpen && <ReceiptsWindow trail={trail} error={trailError} onClose={() => {
+            setReceiptsOpen(false);
+            audio.sfx("close");
+          }} />}
 
-      {marketsOpen && <MarketsWindow markets={markets} spot={loaded.spot} error={marketsError} onClose={() => setMarketsOpen(false)} />}
+      {marketsOpen && <MarketsWindow markets={markets} spot={loaded.spot} error={marketsError} onClose={() => {
+            setMarketsOpen(false);
+            audio.sfx("close");
+          }} />}
 
       {plate && (
-        <div className="plate-overlay" onClick={() => setPlate(false)} role="dialog" aria-label="Survey plate">
+        <div className="plate-overlay" onClick={closePlate} role="dialog" aria-label="Survey plate">
           <div className="plate-window" onClick={(e) => e.stopPropagation()}>
             <header className="plate-head">
               <div>
                 <span className="plate-kicker">THE SURVEY PLATE</span>
                 <h2 className="plate-title">{loaded.label}</h2>
               </div>
-              <button type="button" className="plate-close" onClick={() => setPlate(false)} aria-label="Close the plate">
+              <button type="button" className="plate-close" onClick={closePlate} aria-label="Close the plate">
                 ×
               </button>
             </header>

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { dprIn } from "./screen";
 import { T, FONT_MONO } from "./theme";
+import { audio } from "./audio";
 
 /**
  * The furniture of the instrument.
@@ -117,6 +118,7 @@ export function button(scene: Phaser.Scene, x: number, y: number, text: string, 
     container.on("pointerover", () => {
       face.setTint(lighten(tone, 0.45));
       scene.input.setDefaultCursor("pointer");
+      audio.sfx("hover");
     });
     container.on("pointerout", () => {
       rest();
@@ -127,6 +129,7 @@ export function button(scene: Phaser.Scene, x: number, y: number, text: string, 
     container.on("pointerdown", () => {
       face.setTint(darken(tone, 0.25));
       t.setY(labelY + 1);
+      audio.sfx("press");
       options.onClick?.();
     });
     container.on("pointerup", rest);

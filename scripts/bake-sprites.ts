@@ -5,7 +5,7 @@
  *
  * Nothing here is hand-drawn at runtime. The surveyor's walk cycle and the
  * sea monsters' swim/dive/surface frames are derived from single CC0 frames
- * in Kenney's Tiny Dungeon; everything else — clutter, peaks, particle motes,
+ * in Kenney's Tiny Dungeon; the scouts, the clutter, peaks, particle motes,
  * the interface's nine-slice panels and the top bar — is drawn from
  * the project's palette. Output goes to public/assets/scree/.
  */
@@ -320,6 +320,85 @@ function bakeSurveyor(): Pix {
   }
   for (let f = 0; f < 8; f++) frames.push(drawSurveyor("side", walk(f)));
   return sheet(frames, 8, 32, 40);
+}
+
+/* ── the scouts ──────────────────────────────────────────────────────── */
+
+const K = {
+  helmet: rgb(98, 116, 62),
+  helmetLight: rgb(134, 154, 86),
+  helmetDark: rgb(62, 76, 40),
+  tunic: rgb(86, 104, 56),
+  tunicLight: rgb(112, 132, 72),
+  tunicDark: rgb(58, 70, 38),
+  belt: rgb(104, 78, 44),
+  buckle: rgb(206, 176, 92),
+  trouser: rgb(72, 62, 46),
+  boot: rgb(42, 32, 26),
+  rifle: rgb(62, 66, 76),
+  rifleLight: rgb(146, 150, 162),
+  stock: rgb(110, 78, 46),
+  outline: rgb(22, 24, 28),
+};
+
+/**
+ * A scout: a small soldier, 16×16, feet on the bottom row, facing right,
+ * rifle on the shoulder. `stride` swings the legs (-2..2), `bob` lifts the
+ * body (negative is up); the legs stretch to keep the boots on the ground.
+ */
+function drawScout(stride: number, bob: number): Pix {
+  const p = new Pix(16, 16);
+  const b = bob;
+  // legs and boots: the front leg leads by the stride, the back leg trails
+  const back = 6 - Math.round(stride / 2);
+  const front = 8 + Math.round(stride / 2);
+  for (const x of [back, front]) {
+    p.fill(x, 11 + b, 2, 3 - b, K.trouser);
+    p.fill(x, 14, 2, 2, K.boot);
+  }
+  // tunic, lit from the left, with the belt and its buckle
+  p.fill(5, 7 + b, 6, 3, K.tunic);
+  p.fill(5, 7 + b, 1, 3, K.tunicLight);
+  p.fill(10, 7 + b, 1, 3, K.tunicDark);
+  p.fill(5, 10 + b, 6, 1, K.belt);
+  p.put(8, 10 + b, K.buckle);
+  // the rifle, slung up and to the right, and the hand that holds it
+  for (let k = 0; k < 6; k++) p.put(9 + k, 9 + b - k, k === 5 ? K.rifleLight : k < 2 ? K.stock : K.rifle);
+  p.put(10, 8 + b, S.skin);
+  // face: an eye on the leading side
+  p.fill(6, 4 + b, 4, 3, S.skin);
+  p.put(6, 5 + b, S.skinShade);
+  p.put(9, 5 + b, S.eye);
+  // helmet with a dark rim
+  p.fill(6, 1 + b, 4, 1, K.helmetLight);
+  p.fill(5, 2 + b, 6, 1, K.helmet);
+  p.fill(5, 3 + b, 6, 1, K.helmetDark);
+  outline(p, K.outline);
+  return p;
+}
+
+/**
+ * Six frames: a four-frame march, then two frames of a scout sunk to the
+ * chest under a moving line of foam, for the ones that crossed the shore.
+ */
+function bakeScouts(): Pix {
+  const frames: Pix[] = [];
+  const march: [number, number][] = [
+    [2, 0],
+    [0, -1],
+    [-2, 0],
+    [0, -1],
+  ];
+  for (const [stride, bob] of march) frames.push(drawScout(stride, bob));
+  const WATERLINE = 11;
+  for (let k = 0; k < 2; k++) {
+    const sunk = drawScout(0, 0)
+      .shifted(0, 5 + k)
+      .map((c, _x, y) => (y > WATERLINE ? CLEAR : c));
+    for (let x = 3; x < 13; x++) if ((x + k) % 2 === 0) sunk.put(x, WATERLINE, P.foam);
+    frames.push(sunk);
+  }
+  return sheet(frames, 6, 16, 16);
 }
 
 /* ── sea monsters ────────────────────────────────────────────────────── */
@@ -741,6 +820,7 @@ function bakeTopbar(): Pix {
 console.log("baking sheets → public/assets/scree/");
 save("surveyor.png", bakeSurveyor());
 save("monsters.png", bakeMonsters());
+save("scouts.png", bakeScouts());
 save("clutter.png", bakeClutter());
 save("peaks.png", bakePeaks());
 save("fx.png", bakeFx());

@@ -5,7 +5,7 @@ import { UI, label, nine } from "./chrome";
 import { WebFontFile } from "./fonts";
 import { doorLayout } from "./layout";
 import { logical, pinToScreen } from "./screen";
-import { blip } from "./sfx";
+import { audio } from "./audio";
 import { T } from "./theme";
 import type { TerrainGrid } from "./terrain";
 import type { WorldData } from "./WorldScene";
@@ -84,6 +84,7 @@ export class LandingScene extends Phaser.Scene {
     this.cinematicPan();
 
     this.layout();
+    audio.music("door");
     const onResize = () => {
       this.lens.setSize(this.scale.width, this.scale.height);
       this.cinematicPan();
@@ -130,6 +131,15 @@ export class LandingScene extends Phaser.Scene {
     // The veil: the ground shows through, the type does not compete with it.
     this.hud.add(this.add.rectangle(0, 0, W, H, 0x081820, 0.58).setOrigin(0, 0));
 
+    // The sound switch, top right. The browser plays nothing before the first click anywhere; this is as good a first click as any.
+    const toggle = label(this, W - 14, 12, audio.enabled ? "SOUND ON" : "SOUND OFF", { size: 8, font: f.pixel, color: audio.enabled ? T.ley : T.inkDim, align: "right", crisp: true, stroke: { color: T.shellEdge, thickness: 3 } });
+    toggle.setInteractive({ useHandCursor: true }).on("pointerdown", () => {
+      audio.setEnabled(!audio.enabled);
+      audio.sfx("press");
+      this.time.delayedCall(0, () => this.layout());
+    });
+    this.hud.add(toggle);
+
     // The title.
     const { y: titleY, size } = d.title;
     const kicker = W < 560 ? "HOW YOU GET LIQUIDATED, AS A MAP" : "A SURVEY MAP OF HOW YOU GET LIQUIDATED";
@@ -164,7 +174,7 @@ export class LandingScene extends Phaser.Scene {
     face.setInteractive({ useHandCursor: true });
     face.on("pointerover", () => {
       face.setFrame(1);
-      blip("hover");
+      audio.sfx("hover");
     });
     face.on("pointerout", () => {
       face.setFrame(0);
@@ -173,7 +183,7 @@ export class LandingScene extends Phaser.Scene {
     face.on("pointerdown", () => {
       face.setFrame(2);
       t.setY(-2);
-      blip("press");
+      audio.sfx("press");
     });
     face.on("pointerup", () => {
       face.setFrame(1);
@@ -219,7 +229,8 @@ export class LandingScene extends Phaser.Scene {
   private begin(address: string | null) {
     if (this.leaving) return;
     this.leaving = true;
-    blip("begin");
+    audio.sfx("begin");
+    audio.music("survey");
     this.setStatus(address ? `Surveying ${short(address)}…` : "Opening the reference book…", false);
     this.opts.field.disable();
     this.cameras.main.fadeOut(500, 0, 0, 0);

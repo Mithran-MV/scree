@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { Band, dwellFyToTileY, footprintCells, type Segment, type TerrainGrid } from "./terrain";
 import { TILE } from "./tileset";
-import { CLUTTER, FX, MONSTERS, SHEET, ZONE_COLOURS } from "./figures";
+import { CLUTTER, FX, MONSTERS, SCOUT, SHEET, ZONE_COLOURS } from "./figures";
 import { hash } from "./clutter";
 import { blueprintFor, greetingFor } from "./holdfasts";
 import { LAYOUT, mapViewport } from "./layout";
@@ -9,6 +9,7 @@ import { logical } from "./screen";
 import { EV, type CitadelHover, type GuardianEvent, type MonsterEvent, type ScoutsEvent, type WelcomeEvent, type ZoneReading } from "./events";
 import { Ground } from "./ground";
 import { loadWorldSheets } from "./assets";
+import { audio } from "./audio";
 import { Surveyor } from "./Surveyor";
 import { SeaMonster } from "./SeaMonster";
 import { T } from "./theme";
@@ -49,7 +50,7 @@ export interface WorldData {
   ui: UIData;
 }
 
-const MOTE_KEY = "scree-mote";
+const SCOUT_ANIM = { march: "scout-march", drowned: "scout-drowned" } as const;
 const SCALE = LAYOUT.scale;
 const TILE_PX = TILE * SCALE;
 const WALK_SPEED = 120 * SCALE;
@@ -187,7 +188,7 @@ export class WorldScene extends Phaser.Scene {
     this.worldW = this.ground.worldW;
     this.worldH = this.ground.worldH;
     this.ground.animate();
-    this.ensureMoteTexture();
+    this.registerScoutAnimations();
     this.drawLines();
     this.drawAxis();
     this.raiseFaults();
@@ -203,6 +204,7 @@ export class WorldScene extends Phaser.Scene {
     // in list order, so it is brought to the top explicitly.
     this.scene.launch("UIScene", this.opts.ui);
     this.scene.bringToTop("UIScene");
+    audio.music("survey");
   }
 
   /** Y-sorted depth inside the ground shelf: lower on screen draws later. */
@@ -450,6 +452,7 @@ export class WorldScene extends Phaser.Scene {
   /** Tween the camera in on the surveyor, then redraw what is drawn in screen pixels. */
   private lookCloser(zoom: number) {
     const cam = this.cameras.main;
+    audio.sfx("zoom");
     // Points of interest are asked for in CSS pixels per world unit; the camera works in device pixels.
     const target = zoom * logical(this).D;
     cam.zoomTo(Math.max(target, this.fitZoom()), 1000, "Sine.easeInOut", true, (_c: Phaser.Cameras.Scene2D.Camera, progress: number) => {
@@ -680,11 +683,14 @@ export class WorldScene extends Phaser.Scene {
   /** Walk the surveyor to a point on the map. Where he stands is a scenario. */
   walkTo(fx: number, fy: number) {
     const target = this.fractionsToWorld(Phaser.Math.Clamp(fx, 0.01, 0.99), Phaser.Math.Clamp(fy, 0, 0.99));
+    audio.walking(true);
     this.surveyor.walkTo(target.x, target.y, WALK_SPEED, () => this.arrive(fx, fy));
   }
 
   private arrive(fx: number, fy: number) {
     const reading = this.opts.readAt(fx, fy);
+    audio.walking(false);
+    audio.sfx(reading.drowned ? "drown" : "arrive");
     if (reading.drowned) {
       this.cameras.main.flash(260, 226, 96, 58);
       this.cameras.main.shake(180, 0.004);
@@ -738,14 +744,18 @@ export class WorldScene extends Phaser.Scene {
     let survived = 0;
     const duration = 4200;
 
-    for (const path of paths) {
-      const scout = this.add.image(this.surveyor.x, this.surveyor.y - SCALE * 2, MOTE_KEY).setScale(SCALE * 0.7).setDepth(DEPTH.scouts).setAlpha(0.9);
+    paths.forEach((path, i) => {
+      // Each scout is a small soldier off the baked sheet, marching in step
+      // with the others but not in phase, and the column files out over half
+      // a second rather than leaving in one lump.
+      const scout = this.add.sprite(this.surveyor.x, this.surveyor.y, SHEET.scouts, i % 4).setOrigin(0.5, 1).setScale(SCALE * 0.6).setDepth(DEPTH.scouts);
+      scout.play({ key: SCOUT_ANIM.march, startFrame: i % 4 });
       const steps = path.diedAt === null ? path.points.length - 1 : path.diedAt;
       const walked = path.points.slice(0, Math.max(1, steps) + 1);
       const perStep = duration / Math.max(1, path.points.length - 1);
-      const chain: Phaser.Types.Tweens.TweenBuilderConfig[] = walked.slice(1).map((p) => {
+      const chain: Phaser.Types.Tweens.TweenBuilderConfig[] = walked.slice(1).map((p, k) => {
         const w = this.fractionsToWorld(p.fx, p.fy);
-        return { targets: scout, x: w.x, y: w.y, duration: perStep, ease: "Linear" };
+        return { targets: scout, x: w.x, y: w.y, duration: perStep, ease: "Linear", delay: k === 0 ? (i % 24) * 18 : 0, onStart: () => scout.setFlipX(w.x < scout.x) };
       });
       const done = () => {
         finished++;
@@ -753,8 +763,9 @@ export class WorldScene extends Phaser.Scene {
           survived++;
           this.tweens.add({ targets: scout, alpha: 0, duration: 400, onComplete: () => scout.destroy() });
         } else {
-          scout.setTint(T.perilBright).setAlpha(1);
-          this.tweens.add({ targets: scout, alpha: 0.35, duration: 6000, delay: 1200 });
+          // Sunk to the chest in the foam, and left there.
+          scout.play(SCOUT_ANIM.drowned).setTint(0xffb8a8);
+          this.tweens.add({ targets: scout, alpha: 0.45, duration: 6000, delay: 1500 });
         }
         if (finished === paths.length) {
           this.scoutsRunning = false;
@@ -764,29 +775,23 @@ export class WorldScene extends Phaser.Scene {
       };
       if (chain.length === 0) {
         done();
-        continue;
+        return;
       }
       // The chain reports through its last tween: a chain-level onComplete is
       // not part of the chain builder's config.
       chain[chain.length - 1]!.onComplete = done;
       this.tweens.chain({ targets: scout, tweens: chain });
-    }
+    });
   }
 
-  private ensureMoteTexture() {
-    if (this.textures.exists(MOTE_KEY)) return;
-    const size = 8;
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d")!;
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, "rgba(232,254,255,1)");
-    grad.addColorStop(0.45, "rgba(53,224,232,0.7)");
-    grad.addColorStop(1, "rgba(53,224,232,0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-    this.textures.addCanvas(MOTE_KEY, canvas);
+  /** The scouts' march and their drowning, off the baked sheet. */
+  private registerScoutAnimations() {
+    const make = (key: string, range: readonly [number, number], frameRate: number) => {
+      if (this.anims.exists(key)) return;
+      this.anims.create({ key, frames: this.anims.generateFrameNumbers(SHEET.scouts, { start: range[0], end: range[1] }), frameRate, repeat: -1 });
+    };
+    make(SCOUT_ANIM.march, SCOUT.march, 10);
+    make(SCOUT_ANIM.drowned, SCOUT.drowned, 3);
   }
 }
 

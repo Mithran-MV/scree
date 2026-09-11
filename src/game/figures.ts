@@ -11,6 +11,7 @@ export const SHEET = {
   dungeon: "kenney-tiny-dungeon",
   surveyor: "scree-surveyor",
   monsters: "scree-monsters",
+  scouts: "scree-scouts",
   clutter: "scree-clutter",
   peaks: "scree-peaks",
   fx: "scree-fx",
@@ -21,6 +22,9 @@ export const FX = { bubble: 0, droplet: 1, spark: 2, smoke: 3, cog: 4, orb: 5, g
 
 /** The surveyor sheet: 32×40 frames, 8 per row, rows in this order. */
 export const SURVEYOR = { frameWidth: 32, frameHeight: 40, perRow: 8, rows: ["idle", "walk_down", "walk_up", "walk_left", "walk_right"] as const };
+
+/** The scouts sheet: 16×16 frames, a four-frame march then two frames sunk under the foam. */
+export const SCOUT = { frameWidth: 16, frameHeight: 16, march: [0, 3], drowned: [4, 5] } as const;
 
 /** The monsters sheet: 12 frames per monster, swim 0-3, dive 4-7, surface 8-11. */
 export const MONSTERS = {
