@@ -75,10 +75,13 @@ export async function runSurvey(
     if (spot === null) return true;
     const hf = healthFactor(b, spot, 0);
     if (hf >= 1) return true;
-    excluded.push({
-      deploymentId: b.deploymentId,
-      reason: `health ${hf.toFixed(2)} at today's price by the schema's thresholds, yet the position is open; an efficiency mode the schema does not expose must apply`,
-    });
+    // Debt with no collateral the schema gives a threshold to is a gap in the
+    // data, not a position under water; say which it is.
+    const reason =
+      b.a === 0 && b.c === 0
+        ? "the schema lists debt here but no collateral with a liquidation threshold, so the position cannot be placed on the map"
+        : `health ${hf.toFixed(2)} at today's price by the schema's thresholds, yet the position is open; an efficiency mode the schema does not expose must apply`;
+    excluded.push({ deploymentId: b.deploymentId, reason });
     return false;
   });
 
