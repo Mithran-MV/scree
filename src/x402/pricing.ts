@@ -56,3 +56,10 @@ export function quoteFor(sources: number, schedule: PriceSchedule = DEFAULT_SCHE
   const tinybar = quoteTinybar(sources, schedule);
   return { sources, tinybar, hbar: hbar(tinybar), asset: "0.0.0" };
 }
+
+/** The credit rail: one credit per source asked, plus one to open the book, in the token's smallest unit. */
+export const CREDIT_DECIMALS = 2;
+export function creditsFor(sources: number): { credits: number; units: string } {
+  const credits = 1 + Math.max(0, Math.floor(sources));
+  return { credits, units: String(credits * 10 ** CREDIT_DECIMALS) };
+}

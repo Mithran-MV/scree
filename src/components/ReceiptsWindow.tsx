@@ -16,6 +16,13 @@ const hbar = (tinybar: string) => {
   return Number.isFinite(n) ? `${(n / 1e8).toFixed(3)} HBAR` : tinybar;
 };
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+/** uaid:aid:3fK…;uid=0.0.1;registry=scree;… → scree · 3fK…9 */
+const agentLabel = (id: string) => {
+  const m = /^uaid:aid:([^;]+);(.*)$/.exec(id);
+  if (!m) return id.slice(0, 16);
+  const params = Object.fromEntries(m[2]!.split(";").map((p) => p.split("=") as [string, string]));
+  return `${params.registry ?? "?"} · ${m[1]!.slice(0, 6)}…${m[1]!.slice(-3)}`;
+};
 const when = (iso: string) => (iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 
 interface Props {
@@ -73,6 +80,7 @@ export function ReceiptsWindow({ trail, error, onClose }: Props) {
                   <th className="num">Sources</th>
                   <th className="num">Paid</th>
                   <th>Payer</th>
+                  <th>Identity</th>
                   <th>Settlement</th>
                   <th>Digest</th>
                 </tr>
@@ -90,8 +98,9 @@ export function ReceiptsWindow({ trail, error, onClose }: Props) {
                     <td className="num">
                       {e.healthy.length}/{e.asked.length}
                     </td>
-                    <td className="num cliff">{hbar(e.amount)}</td>
+                    <td className="num cliff">{hbar(e.amount)}{e.standing ? <span className="dim"> · standing</span> : null}</td>
                     <td>{e.payer ?? "—"}</td>
+                    <td className="dim" title={e.agent ?? ""}>{e.agent ? agentLabel(e.agent) : "—"}</td>
                     <td>
                       <a href={e.links.transaction} target="_blank" rel="noreferrer">
                         {e.transaction}
@@ -102,7 +111,7 @@ export function ReceiptsWindow({ trail, error, onClose }: Props) {
                 ))}
                 {trail.entries.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="dim">
+                    <td colSpan={9} className="dim">
                       Nothing on the topic yet.
                     </td>
                   </tr>

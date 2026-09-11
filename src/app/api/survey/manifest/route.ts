@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { DEPLOYMENTS } from "@/registry/deployments";
 import { verifiedIds } from "@/survey/run";
 import { hashscanUrl, mirrorNodeUrl } from "@/hedera/receipts";
-import { quoteFor, scheduleFromEnv } from "@/x402/pricing";
+import { CREDIT_DECIMALS, creditsFor, quoteFor, scheduleFromEnv } from "@/x402/pricing";
 import { serviceConfig } from "@/x402/service";
 
 export const runtime = "nodejs";
@@ -44,6 +44,19 @@ export function GET() {
               perSourceTinybar: schedule.perSourceTinybar,
               rule: "base + perSource × verified deployments asked, quoted in the 402 before you sign",
               example: quoteFor(verified.length, schedule),
+            },
+            credits: cfg.creditsToken
+              ? {
+                  asset: cfg.creditsToken,
+                  symbol: "SRV",
+                  decimals: CREDIT_DECIMALS,
+                  rule: "one credit per verified deployment asked, plus one; the token's fee schedule returns a fiftieth of each transfer to the service",
+                  example: creditsFor(verified.length),
+                  explorer: `https://hashscan.io/${cfg.network.endsWith("mainnet") ? "mainnet" : "testnet"}/token/${cfg.creditsToken}`,
+                }
+              : null,
+            standing: {
+              rule: "pay ahead with Hedera Scheduled Transactions to payTo, memo scree:standing:<address>[:<sources>]; the steward honours each executed transfer with a survey and a receipt",
             },
           }
         : null,

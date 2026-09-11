@@ -76,6 +76,8 @@ interface Props {
   onMarkets: () => void;
   payment: Payment | null;
   guardian: Guardian | null;
+  oracle: { price: number; updatedAt: string; pair: string } | null;
+  spotSource: "oracle" | "subgraphs" | "legs" | "fixture";
   onReceipts: () => void;
 }
 
@@ -251,7 +253,7 @@ export function ScreeGame(props: Props) {
   const { sources } = props;
   const feed = useMemo<FeedRow[]>(
     () => [
-      { key: "ETH", value: usd(spot) },
+      { key: "ETH", value: `${usd(spot)}${props.spotSource === "oracle" ? " · oracle" : props.spotSource === "fixture" ? "" : " · subgraphs"}` },
       {
         key: "sources",
         value: sources.asked.length
@@ -279,7 +281,7 @@ export function ScreeGame(props: Props) {
       { key: "passes", value: features.boundaryPass ? "1" : "0", tone: "ley" },
       { key: "rises with price", value: `${(features.monoFraction * 100).toFixed(1)}%` },
     ],
-    [spot, sources, props.payment, props.guardian, healthToday, br, shape, grid.zones.length, features],
+    [spot, sources, props.payment, props.guardian, props.spotSource, healthToday, br, shape, grid.zones.length, features],
   );
 
   const notes = useMemo(() => {
@@ -289,6 +291,9 @@ export function ScreeGame(props: Props) {
         `Bought this survey for ${props.payment.paidHbar} HBAR from ${props.payment.payer}: settled on Hedera as ${props.payment.transaction}, receipt on the topic. Open Receipts for the links.`,
       );
     }
+    if (props.oracle && props.spotSource === "oracle") {
+      lines.push(`Today's price is the oracle's: ${props.oracle.pair} ${usd(props.oracle.price)} from the Chainlink aggregator on mainnet, updated ${new Date(props.oracle.updatedAt).toUTCString().replace(" GMT", " UTC")}.`);
+    }
     const g = props.guardian;
     if (g?.verdict) {
       const when = g.observedAt ? new Date(g.observedAt).toUTCString().replace(" GMT", " UTC") : "";
@@ -297,7 +302,7 @@ export function ScreeGame(props: Props) {
       );
     }
     return lines;
-  }, [sources, props.payment, props.guardian]);
+  }, [sources, props.payment, props.guardian, props.oracle, props.spotSource]);
 
   /* ── state pushed to the interface ────────────────────────────── */
 

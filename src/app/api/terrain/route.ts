@@ -4,6 +4,16 @@ import { ADDRESS, resolveSources, runSurvey, verifiedIds, type SurveyResult } fr
 import { buyJson, buyerFromEnv, hashscanTx } from "@/x402/buyer";
 import { quoteForRequest, serviceConfig } from "@/x402/service";
 import { hashscanUrl } from "@/hedera/receipts";
+import { readEthUsd, usableSpot, type OraclePrice } from "@/oracle/chainlink";
+
+/** The oracle, read once per request and never allowed to fail the survey. */
+async function oracle(): Promise<OraclePrice | null> {
+  try {
+    return await readEthUsd();
+  } catch {
+    return null;
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,6 +80,7 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           ...survey,
+          oracle: await oracle(),
           payment: bought.settlement
             ? {
                 paidHbar: metering?.priceHbar ?? quote.hbar,
@@ -89,14 +100,16 @@ export async function GET(request: Request) {
       );
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      const survey = await runSurvey(address, sources, apiKey);
+      const o = await oracle();
+      const survey = await runSurvey(address, sources, apiKey, usableSpot(o, null));
       return NextResponse.json(
-        { ...survey, payment: null, failed: [...survey.failed, { deploymentId: "payment", reason: `the platform could not buy this survey (${reason}); read directly instead` }] },
+        { ...survey, oracle: o, payment: null, failed: [...survey.failed, { deploymentId: "payment", reason: `the platform could not buy this survey (${reason}); read directly instead` }] },
         { headers: { "cache-control": "private, no-store" } },
       );
     }
   }
 
-  const survey = await runSurvey(address, sources, apiKey);
-  return NextResponse.json({ ...survey, payment: null }, { headers: { "cache-control": "public, max-age=15" } });
+  const o = await oracle();
+  const survey = await runSurvey(address, sources, apiKey, usableSpot(o, null));
+  return NextResponse.json({ ...survey, oracle: o, payment: null }, { headers: { "cache-control": "public, max-age=15" } });
 }

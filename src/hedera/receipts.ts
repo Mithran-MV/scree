@@ -34,6 +34,10 @@ export interface Receipt {
   transaction: string;
   /** SHA-256 of the response body exactly as it was sent. */
   bodySha256: string;
+  /** The buyer's HCS-14 identifier, if it sent one. */
+  agent?: string;
+  /** Paid ahead by a scheduled transfer and honoured by the steward, rather than bought at request time. */
+  standing?: true;
 }
 
 export function sha256Hex(bytes: Uint8Array | string): string {

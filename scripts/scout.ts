@@ -9,6 +9,8 @@
  * and looks for that digest in the receipts topic on the mirror node.
  *
  *   npm run scout -- --address 0x… [--address 0x…] [--sources a,b] [--budget 0.5] [--service https://scree.hacklabs.in]
+ *   npm run scout -- --address 0x… --schedule 3 --every 10     # pay ahead: three scheduled transfers, ten minutes apart
+ *   npm run scout -- --address 0x… --rail credits              # pay in survey credits (HTS) instead of HBAR
  *
  * Needs AGENT_HEDERA_ACCOUNT_ID and BURNER_PRIVATE_KEY (an ECDSA key) in the
  * environment. Testnet only; the budget is in HBAR.
@@ -18,9 +20,11 @@ import { wrapFetchWithPayment, x402Client, x402HTTPClient } from "@x402/fetch";
 import { ExactHederaScheme } from "@x402/hedera/exact/client";
 import { createClientHederaSigner, PrivateKey } from "@x402/hedera";
 import { createHash } from "node:crypto";
+import { AccountId, Client, Hbar, PrivateKey as HederaKey, ScheduleCreateTransaction, Timestamp, TransferTransaction } from "@hiero-ledger/sdk";
 import { elevation, liquidationPrice } from "../src/core/kernel";
 import type { Basket } from "../src/core/types";
 import { hbar, TINYBAR_PER_HBAR } from "../src/x402/pricing";
+import { AGENT_HEADER, hederaAgent, uaid } from "../src/agent/identity";
 
 loadLocalEnv();
 
@@ -36,6 +40,8 @@ const sources = opt("sources") ?? null;
 const budgetHbar = Number.parseFloat(opt("budget") ?? "0.5");
 const service = (opt("service") ?? "http://localhost:3000").replace(/\/$/, "");
 const everyMin = Number.parseFloat(opt("every") ?? "0");
+const scheduleCount = Number.parseInt(opt("schedule") ?? "0", 10);
+const rail = (opt("rail") ?? "hbar").toLowerCase();
 
 if (addresses.length === 0) {
   console.error("usage: npm run scout -- --address 0x… [--sources a,b] [--budget 0.5] [--service URL] [--every MIN]");
@@ -60,6 +66,7 @@ interface Manifest {
     payTo: string;
     facilitator: string;
     pricing: { baseTinybar: number; perSourceTinybar: number };
+    credits: { asset: string; symbol: string; decimals: number } | null;
   } | null;
   receipts: { topic: string; mirror: string; explorer: string } | null;
   sources: { id: string; verified: boolean }[];
@@ -84,14 +91,30 @@ if (manifest.receipts) console.log(`receipts  ${manifest.receipts.explorer}`);
 /* ── the paying client ─────────────────────────────────────────────── */
 
 const signer = createClientHederaSigner(accountId, PrivateKey.fromStringECDSA(privateKey), { network: pay.network });
-const client = new x402Client()
+if (rail === "credits" && !pay.credits) {
+  console.error("this service issues no credit token; pay in HBAR");
+  process.exit(1);
+}
+const creditUnits = pay.credits ? String((1 + asked.length) * 10 ** pay.credits.decimals) : "0";
+const client = new x402Client((_v, reqs) => {
+  // The rail is the buyer's choice: the requirement in the asset it wants to pay with, else the first offered.
+  const wanted = rail === "credits" ? pay.credits!.asset : pay.asset;
+  return reqs.find((r) => r.asset === wanted) ?? reqs[0]!;
+})
   .register(pay.network as `${string}:${string}`, new ExactHederaScheme(signer))
   .setSpendControls({
-    // Never sign for more than the quote the manifest led us to expect.
-    allowedAssets: [{ network: pay.network as `${string}:${string}`, asset: pay.asset, maxAmountPerPayment: String(quoteTinybar) }],
+    // Never sign for more than the quote the manifest led us to expect, on either rail.
+    allowedAssets: [
+      { network: pay.network as `${string}:${string}`, asset: pay.asset, maxAmountPerPayment: String(quoteTinybar) },
+      ...(pay.credits ? [{ network: pay.network as `${string}:${string}`, asset: pay.credits.asset, maxAmountPerPayment: creditUnits }] : []),
+    ],
   });
+if (rail === "credits") console.log(`rail      paying in ${pay.credits!.symbol} (${pay.credits!.asset}): ${1 + asked.length} credits per survey, plus the token's own fee`);
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 const httpClient = new x402HTTPClient(client);
+// Who this scout is, by HCS-14: derived from its name and account, sent with every purchase, kept in the receipt.
+const identity = uaid(hederaAgent("scree-scout", "0.1.0", pay.network, accountId));
+console.log(`identity  ${identity}`);
 
 /* ── one survey ────────────────────────────────────────────────────── */
 
@@ -121,7 +144,7 @@ async function survey(address: string): Promise<void> {
 
   console.log(`\n== ${address}`);
   const t0 = Date.now();
-  const res = await fetchWithPayment(url.toString());
+  const res = await fetchWithPayment(url.toString(), { headers: { [AGENT_HEADER]: identity } });
   const bytes = new Uint8Array(await res.arrayBuffer());
   const text = new TextDecoder().decode(bytes);
   if (!res.ok) {
@@ -133,7 +156,7 @@ async function survey(address: string): Promise<void> {
   const digest = createHash("sha256").update(bytes).digest("hex");
   spentTinybar += s.metering.priceTinybar;
 
-  console.log(`  paid      ${s.metering.priceHbar} HBAR for ${s.metering.sourcesAsked} sources, in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  console.log(`  paid      ${rail === "credits" ? `${1 + s.metering.sourcesAsked} ${pay.credits!.symbol}` : `${s.metering.priceHbar} HBAR`} for ${s.metering.sourcesAsked} sources, in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   if (settlement) {
     console.log(`  settled   ${settlement.transaction}`);
     console.log(`            https://hashscan.io/${pay.network.endsWith("mainnet") ? "mainnet" : "testnet"}/transaction/${settlement.transaction}`);
@@ -159,7 +182,8 @@ async function confirmReceipt(r: { topic: string; mirror: string }, transaction:
         const body = JSON.parse(Buffer.from(m.message, "base64").toString("utf8")) as { transaction?: string; bodySha256?: string };
         if (body.transaction === transaction) {
           const match = body.bodySha256 === digest ? "matches what I received" : "DOES NOT MATCH what I received";
-          console.log(`  receipt   topic ${r.topic} #${m.sequence_number} at ${m.consensus_timestamp}, digest ${match}`);
+          const who = (body as { agent?: string }).agent === identity ? ", paid by my identity" : "";
+          console.log(`  receipt   topic ${r.topic} #${m.sequence_number} at ${m.consensus_timestamp}, digest ${match}${who}`);
           return;
         }
       }
@@ -170,11 +194,50 @@ async function confirmReceipt(r: { topic: string; mirror: string }, transaction:
   console.log(`  receipt   not seen on the topic yet; it may still be in flight`);
 }
 
+/**
+ * A standing survey, paid ahead: N transfers to the service, scheduled on
+ * Hedera to execute by themselves every `everyMin` minutes, each carrying the
+ * memo the steward reads. No timer in this process is needed afterwards; the
+ * ledger pays on time whether the scout is running or not.
+ */
+async function schedule(address: string): Promise<void> {
+  if (!(everyMin > 0)) throw new Error("--schedule needs --every MIN");
+  const client = pay.network.endsWith("mainnet") ? Client.forMainnet() : Client.forTestnet();
+  client.setOperator(AccountId.fromString(accountId!), HederaKey.fromStringECDSA(privateKey!));
+  const memo = `scree:standing:${address}${sources ? `:${sources}` : ""}`;
+  console.log(`
+scheduling ${scheduleCount} surveys of ${address}, one every ${everyMin} min, ${hbar(quoteTinybar)} HBAR each, memo ${memo}`);
+  try {
+    for (let i = 1; i <= scheduleCount; i++) {
+      const at = Timestamp.fromDate(new Date(Date.now() + i * everyMin * 60_000));
+      const transfer = new TransferTransaction()
+        .addHbarTransfer(AccountId.fromString(accountId!), Hbar.fromTinybars(-quoteTinybar))
+        .addHbarTransfer(AccountId.fromString(pay.payTo), Hbar.fromTinybars(quoteTinybar))
+        .setTransactionMemo(memo);
+      const tx = await new ScheduleCreateTransaction()
+        .setScheduledTransaction(transfer)
+        .setScheduleMemo(memo)
+        .setExpirationTime(at)
+        .setWaitForExpiry(true)
+        .execute(client);
+      const receipt = await tx.getReceipt(client);
+      console.log(`  #${i} schedule ${receipt.scheduleId?.toString()} executes at ${at.toDate().toISOString()}  https://hashscan.io/${pay.network.endsWith("mainnet") ? "mainnet" : "testnet"}/schedule/${receipt.scheduleId?.toString()}`);
+    }
+  } finally {
+    client.close();
+  }
+  console.log("the steward on the service honours each one when it executes: npm run steward");
+}
+
 async function round(): Promise<void> {
   for (const a of addresses) await survey(a);
   console.log(`\nspent ${hbar(spentTinybar)} of ${budgetHbar} HBAR`);
 }
 
+if (scheduleCount > 0) {
+  for (const a of addresses) await schedule(a);
+  process.exit(0);
+}
 await round();
 if (everyMin > 0) {
   console.log(`\nre-surveying every ${everyMin} min until stopped or the budget is spent`);

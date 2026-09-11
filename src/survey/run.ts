@@ -34,8 +34,12 @@ export function verifiedIds(): string[] {
 
 export interface SurveyResult {
   address: string;
-  /** Today's price of the charted asset, as the deployments reported it. Null if none quoted. */
+  /** Today's price of the charted asset: the oracle's when fresh, else the deployments' median. Null if none. */
   spot: number | null;
+  /** Where spot came from. */
+  spotSource: "oracle" | "subgraphs" | "legs" | null;
+  /** The deployments' own median, kept so the two can be compared. */
+  subgraphSpot: number | null;
   baskets: Basket[];
   /** Deployments set aside because the schema could not explain an open position. */
   excluded: { deploymentId: string; reason: string }[];
@@ -63,11 +67,14 @@ export async function runSurvey(
   address: string,
   sources: Sources,
   apiKey: string,
+  oracleSpot: number | null = null,
 ): Promise<SurveyResult> {
   const result = await fanOut(address, sources.deployments, { apiKey });
 
   const quoted = Object.values(result.spotUSD);
-  const spot = quoted.length ? median(quoted) : spotFromLegs(result.legs);
+  const subgraphSpot = quoted.length ? median(quoted) : spotFromLegs(result.legs);
+  const spot = oracleSpot ?? subgraphSpot;
+  const spotSource: SurveyResult["spotSource"] = oracleSpot !== null ? "oracle" : quoted.length ? "subgraphs" : subgraphSpot !== null ? "legs" : null;
   const reduced = reduceToBaskets(result.legs, undefined, spot);
 
   const excluded: { deploymentId: string; reason: string }[] = [];
@@ -88,6 +95,8 @@ export async function runSurvey(
   return {
     address,
     spot,
+    spotSource,
+    subgraphSpot,
     baskets,
     excluded,
     shape: walletShape(baskets),

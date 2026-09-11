@@ -13,7 +13,10 @@
     "gate": "tsx scripts/geometry-gate.ts",
     "verify:subgraphs": "tsx scripts/verify-subgraphs.ts",
     "hedera:topic": "tsx scripts/new-topic.ts",
+    "hedera:credits": "tsx scripts/new-credits.ts",
     "scout": "tsx scripts/scout.ts",
+    "steward": "tsx scripts/steward.ts",
+    "ask": "tsx scripts/ask.ts",
     "guardian:deploy": "tsx scripts/deploy-guardian.ts",
     "guardian:read": "tsx scripts/read-guardian.ts",
     "dev": "next dev",
@@ -32,6 +35,7 @@
   },
   "dependencies": {
     "@hiero-ledger/sdk": "^2.88.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@x402/core": "^2.25.0",
     "@x402/fetch": "^2.25.0",
     "@x402/hedera": "^2.25.0",

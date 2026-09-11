@@ -79,6 +79,28 @@ Three things on screen come from it:
   liquidation threshold. A fresh maximum-leverage position stands on that
   cliff, and the flags show how far apart the seven cliffs are.
 
+## Asking the survey, through a second Graph product
+
+`npm run ask -- "how healthy is 0x…"` answers from the same seven
+deployments without the map, and without the registry's ids being typed
+anywhere in the request: it opens The Graph's Subgraph MCP server, finds each
+deployment by keyword through the MCP's search tool, runs the one
+`WalletPositions` query on each through the MCP's query tool, and feeds the
+answers to the same normaliser and reducer the map uses. The question is
+matched to a reading (health, where it liquidates, which deployment binds
+first); the numbers are the survey's, not a paraphrase. Two Graph products
+composed over one standardized schema, and the answer agrees with the map to
+the digit.
+
+```
+  aave-v3-ethereum       found "Aave V3 Ethereum" by keyword
+  …
+  spark-ethereum         found "Spark Lend Ethereum" by keyword
+
+0xb7b7eb… has health 1.497 at $2,611 across 3 deployments (aave-v3-ethereum, aave-v3-avalanche, spark-ethereum); shape LONG-ONLY.
+Nearest liquidation $1,332 on spark-ethereum.
+```
+
 ## On screen
 
 **The door.** A landing scene: the same terrain the survey draws, drifting
@@ -288,6 +310,36 @@ reading with the settlement link, and then reads the topic back until it
 finds the receipt for its own transaction and confirms the digest matches.
 Pass `--every 10` to re-survey on a schedule until the budget is spent.
 
+Every buyer says who it is. The scout and the platform each derive an
+[HCS-14](https://hashgraphonline.com/docs/standards/hcs-14/) identifier
+from their name and Hedera account (`src/agent/identity.ts`: the six
+canonical fields, SHA-384, Base58, the routing parameters in order), send it
+with each purchase, and the service copies a well-formed one into the
+receipt. The Receipts window shows which identity paid. Anyone can recompute
+the identifier from the same public inputs; no registry is consulted.
+
+A standing survey is paid for ahead, on the ledger's clock rather than a
+timer in the buyer. `npm run scout -- --address 0x… --schedule 3 --every 10`
+creates three Hedera Scheduled Transactions: transfers to the service that
+the network executes by itself at their expiry, each carrying the memo
+`scree:standing:<address>[:<sources>]`. The steward (`npm run steward`, or
+`--watch` on the service) reads the service account's transfers from the
+mirror node, finds executed scheduled ones with that memo it has not yet
+honoured, runs each survey, and writes a receipt marked `standing` with the
+scheduled transfer as its settlement. Two ran on testnet: schedules
+[0.0.10477153](https://hashscan.io/testnet/schedule/0.0.10477153) and
+[0.0.10477154](https://hashscan.io/testnet/schedule/0.0.10477154), receipts
+#18 and #19 on the topic.
+
+A second rail is written and waits on test funds: `npm run hedera:credits`
+issues SRV, a survey-credit token whose fee schedule returns a fiftieth of
+every transfer to the service, associates the agent and sends it credits;
+the service then offers a second `accepts` entry priced one credit per
+source plus one, the manifest names both rails, and `--rail credits` makes
+the scout pay in credits. Issuing a token with a fee schedule costs about
+two dollars of test HBAR at the network's rate, more than the service
+account holds today.
+
 ```
 price     0.01 + 0.005 × 7 sources = 0.045 HBAR per survey
 == 0xb7b7…6fd4
@@ -408,8 +460,11 @@ build when the drawing and the measurement disagree.
 - **ETH is ETH whatever receipt it is held as.** stETH, wstETH, weETH, rsETH,
   osETH and the rest of the family are counted as the charted asset, each at
   its own price against spot, so a staking loop reads as flat rather than as a
-  short that drowns at the first pump. Spot itself is what the deployments
-  report, agreed by median, not a number typed into the page.
+  short that drowns at the first pump. Spot itself is the oracle's: the
+  Chainlink ETH/USD aggregator on mainnet, the number the protocols
+  themselves liquidate against, taken when it is under two hours old and
+  within a fifth of what the deployments report; otherwise the deployments'
+  median. The feed says which, and the log names the round.
 - **What the schema cannot explain is set aside, not drawn.** A position that
   is open on-chain but under water by the schema's own liquidation thresholds
   is being held up by something the schema does not carry, an efficiency mode
@@ -449,12 +504,15 @@ registry row.
 | Script | What it does |
 |---|---|
 | `npm run dev` | development server |
-| `npm test` | the full suite, 164 tests |
+| `npm test` | the full suite, 171 tests |
 | `npm run gate` | measure the terrain and fail on a flat map |
 | `npm run typecheck` | types |
 | `npm run verify:subgraphs` | resolve every subgraph id against the gateway |
 | `npm run hedera:topic` | create the HCS topic that receives survey receipts |
-| `npm run scout -- --address 0x…` | an agent that discovers, pays for and verifies a survey |
+| `npm run scout -- --address 0x…` | an agent that discovers, pays for and verifies a survey; `--schedule N --every M` pays ahead; `--rail credits` pays in SRV |
+| `npm run steward` | honour executed scheduled payments with surveys and receipts (`--watch` to keep going) |
+| `npm run ask -- "…0x…"` | answer a question from the seven deployments through the Subgraph MCP |
+| `npm run hedera:credits` | issue the survey-credit token and fund the agent with it |
 | `npm run guardian:deploy` | compile and deploy the verdict ledger to Sepolia |
 | `npm run guardian:read` | read the ledger's latest verdict for a wallet |
 | `npm run bake:sprites` | regenerate the baked sheets under `public/assets/scree/` |
@@ -489,6 +547,8 @@ with borders before connecting your own wallet:
 | `src/survey` | the survey itself, shared by the free route and the paid one |
 | `src/x402` | the price schedule and the payment gate |
 | `src/hedera` | receipts on the Consensus Service, and the trail read back |
+| `src/oracle` | the Chainlink ETH/USD aggregator as today's price |
+| `src/agent` | HCS-14 identifiers for buyers |
 | `cre` | the confidential workflow, its ledger contract, and the evidence of its runs |
 | `src/field` | the raster and its features |
 | `src/render` | contours, hachures and the survey plate |

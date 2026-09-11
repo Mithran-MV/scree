@@ -2,6 +2,7 @@ import { wrapFetchWithPayment, x402Client, x402HTTPClient } from "@x402/fetch";
 import { ExactHederaScheme } from "@x402/hedera/exact/client";
 import { createClientHederaSigner, PrivateKey } from "@x402/hedera";
 import type { Network } from "@x402/core/types";
+import { AGENT_HEADER, hederaAgent, uaid } from "@/agent/identity";
 
 /**
  * The platform as a buyer.
@@ -16,13 +17,22 @@ export interface BuyerConfig {
   network: Network;
   accountId: string;
   privateKey: string;
+  /** What this buyer calls itself; the identifier is derived from it. */
+  name?: string;
+  domain?: string;
+}
+
+/** The buyer's HCS-14 identifier, derived from its name and its Hedera account. */
+export function buyerIdentity(cfg: BuyerConfig): string {
+  return uaid(hederaAgent(cfg.name ?? "scree-platform", "0.1.0", cfg.network, cfg.accountId, cfg.domain ? { domain: cfg.domain } : {}));
 }
 
 export function buyerFromEnv(env: Record<string, string | undefined> = process.env): BuyerConfig | null {
   const accountId = env.AGENT_HEDERA_ACCOUNT_ID;
   const privateKey = env.BURNER_PRIVATE_KEY;
   if (!accountId || !privateKey) return null;
-  return { network: (env.HEDERA_NETWORK ?? "hedera:testnet") as Network, accountId, privateKey };
+  const domain = env.PUBLIC_URL ? new URL(env.PUBLIC_URL).host : undefined;
+  return { network: (env.HEDERA_NETWORK ?? "hedera:testnet") as Network, accountId, privateKey, name: "scree-platform", ...(domain ? { domain } : {}) };
 }
 
 export interface Settlement {
@@ -62,7 +72,7 @@ function clientFor(cfg: BuyerConfig, maxTinybar: string) {
 export async function buyJson<T>(cfg: BuyerConfig, url: string, maxTinybar: string): Promise<Purchase<T>> {
   const { fetchWithPayment, http } = clientFor(cfg, maxTinybar);
   const t0 = Date.now();
-  const res = await fetchWithPayment(url, { method: "GET" });
+  const res = await fetchWithPayment(url, { method: "GET", headers: { [AGENT_HEADER]: buyerIdentity(cfg) } });
   const text = await res.text();
   if (!res.ok) throw new Error(`paid request failed with ${res.status}: ${text.slice(0, 200)}`);
   const body = JSON.parse(text) as T;

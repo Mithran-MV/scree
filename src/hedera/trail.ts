@@ -47,6 +47,8 @@ export function decodeReceipt(m: MirrorMessage, network: string, topic: string):
     amount: r.amount ?? "0",
     transaction: r.transaction,
     bodySha256: r.bodySha256 ?? "",
+    ...(typeof r.agent === "string" ? { agent: r.agent } : {}),
+    ...(r.standing === true ? { standing: true as const } : {}),
     sequence: m.sequence_number,
     consensusAt: Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : "",
     submittedBy: m.payer_account_id,

@@ -27,6 +27,9 @@ interface Loaded {
   payment: Payment | null;
   /** The address surveyed, for the enclave's verdict; none for the reference book. */
   address: string | null;
+  /** Where today's price came from, and what the oracle said. */
+  oracle: { price: number; updatedAt: string; pair: string } | null;
+  spotSource: "oracle" | "subgraphs" | "legs" | "fixture";
 }
 
 const DEMO: Loaded = {
@@ -37,6 +40,8 @@ const DEMO: Loaded = {
   offAxisCollateralUSD: 0.153 * 110_000,
   payment: null,
   address: null,
+  oracle: null,
+  spotSource: "fixture",
 };
 
 export default function Page() {
@@ -155,6 +160,8 @@ export default function Page() {
         offAxisCollateralUSD: body.offAxisCollateralUSD ?? 0,
         payment: body.payment ?? null,
         address: target,
+        oracle: body.oracle ?? null,
+        spotSource: body.spotSource ?? "subgraphs",
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -234,6 +241,8 @@ export default function Page() {
         }}
         payment={loaded.payment}
         guardian={guardian}
+        oracle={loaded.oracle}
+        spotSource={loaded.spotSource}
         onReceipts={() => {
           setReceiptsOpen(true);
           void loadTrail();

@@ -13,7 +13,8 @@ import { ExactHederaScheme } from "@x402/hedera/exact/server";
 import { parseSources } from "@/registry/deployments";
 import { resolveSources } from "@/survey/run";
 import { operatorFromEnv, sha256Hex, submitReceipt, type Receipt } from "@/hedera/receipts";
-import { quoteFor, scheduleFromEnv, type Quote } from "./pricing";
+import { creditsFor, quoteFor, scheduleFromEnv, type Quote } from "./pricing";
+import { AGENT_HEADER, parseUaid } from "@/agent/identity";
 
 /**
  * The survey as a thing an agent can pay for.
@@ -35,6 +36,8 @@ export interface ServiceConfig {
   payTo: string;
   publicUrl: string;
   receiptsTopic: string | null;
+  /** The survey-credit token, when one has been issued: a second rail with its own fee schedule. */
+  creditsToken: string | null;
 }
 
 export function facilitatorUrlFor(network: string, env: Record<string, string | undefined> = process.env): string {
@@ -54,6 +57,7 @@ export function serviceConfig(env: Record<string, string | undefined> = process.
     payTo,
     publicUrl: (env.PUBLIC_URL ?? "http://localhost:3000").replace(/\/$/, ""),
     receiptsTopic: env.HCS_RECEIPTS_TOPIC ?? null,
+    creditsToken: env.SURVEY_CREDITS_TOKEN ?? null,
   };
 }
 
@@ -143,6 +147,22 @@ function routes(cfg: ServiceConfig): RoutesConfig {
             return { asset: q.asset, amount: String(q.tinybar) };
           },
         },
+        // The credit rail, when the token exists: one credit per source plus one, and the
+        // token's own fee schedule returns a fiftieth of the transfer to the service.
+        ...(cfg.creditsToken
+          ? [
+              {
+                scheme: "exact",
+                network: cfg.network,
+                payTo: cfg.payTo,
+                maxTimeoutSeconds: 300,
+                price: async (ctx: HTTPRequestContext) => {
+                  const q = quoteForRequest(single(ctx.adapter.getQueryParam?.("sources")));
+                  return { asset: cfg.creditsToken!, amount: creditsFor(q.sources).units };
+                },
+              },
+            ]
+          : []),
       ],
       resource: `${cfg.publicUrl}/api/survey`,
       // The requirements travel in the PAYMENT-REQUIRED header; the body is
@@ -207,6 +227,9 @@ function build(cfg: ServiceConfig): Built {
       transaction: ctx.result.transaction,
       bodySha256: body ? sha256Hex(body) : "",
     };
+    // Who paid, by its own account: an HCS-14 identifier in the request, kept only if well-formed.
+    const claimed = single(transport?.request.adapter.getHeader(AGENT_HEADER));
+    if (claimed && parseUaid(claimed)) receipt.agent = claimed.slice(0, 200);
     // The buyer should not wait on consensus for the survey they already paid for.
     void submitReceipt(op, cfg.receiptsTopic, receipt).catch((err) => {
       console.error("[scree] receipt not recorded:", err instanceof Error ? err.message : err);

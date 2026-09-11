@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parseSources } from "@/registry/deployments";
 import { ADDRESS, resolveSources, runSurvey, verifiedIds } from "@/survey/run";
 import { paid, quoteForRequest, serviceConfig } from "@/x402/service";
+import { readEthUsd, usableSpot } from "@/oracle/chainlink";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,11 +35,18 @@ async function survey(request: Request): Promise<Response> {
     );
   }
 
-  const result = await runSurvey(address, sources, apiKey);
+  let oracle = null;
+  try {
+    oracle = await readEthUsd();
+  } catch {
+    oracle = null;
+  }
+  const result = await runSurvey(address, sources, apiKey, usableSpot(oracle, null));
   const quote = quoteForRequest(sourcesParam);
   const cfg = serviceConfig();
   return NextResponse.json({
     ...result,
+    oracle,
     metering: {
       sourcesAsked: quote.sources,
       priceTinybar: quote.tinybar,
