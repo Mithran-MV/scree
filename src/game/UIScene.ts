@@ -126,6 +126,9 @@ export class UIScene extends Phaser.Scene {
   private plate!: Phaser.GameObjects.Container;
   private column!: Phaser.GameObjects.Container;
   private hover!: Phaser.GameObjects.Container;
+  /** The reading panel's height and inset, kept so update() can hold it above the scale as the camera moves. */
+  private hoverH = 0;
+  private hoverInset = 0;
   private popup!: Phaser.GameObjects.Container;
   private popupTween: Phaser.Tweens.Tween | undefined;
   private popupTimer: Phaser.Time.TimerEvent | undefined;
@@ -253,6 +256,8 @@ export class UIScene extends Phaser.Scene {
     const cam = this.world.cameras.main;
     const { D } = logical(this);
     const v = this.lay.map;
+    // The scale moves under the panel as the camera zooms and pans; the camera's view is only current once a frame has been prepared.
+    if (this.hoverH > 0) this.hover.y = this.hoverBottom(v, this.hoverH, this.hoverInset) - this.hoverH;
     // The world camera works in device pixels; this scene in CSS pixels.
     const sx = (wx: number) => (cam.x + (wx - cam.worldView.x) * cam.zoom) / D;
     const sy = (wy: number) => (cam.y + (wy - cam.worldView.y) * cam.zoom) / D;
@@ -410,6 +415,8 @@ export class UIScene extends Phaser.Scene {
       ? label(this, pad, pad + block + 6, this.state.chart.note, { size: TYPE.caption, font: f.mono, color: T.vellumInk, wrap: w - pad * 2 })
       : null;
     const h = pad + block + (caption ? 6 + caption.height : 0) + pad - 2;
+    this.hoverH = h;
+    this.hoverInset = inset;
     this.hover.setPosition(v.x + inset, this.hoverBottom(v, h, inset) - h);
     const parts: Phaser.GameObjects.GameObject[] = [nine(this, UI.panel, 0, 0, w, h), t, b];
     if (caption) parts.push(caption);
