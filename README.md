@@ -26,11 +26,21 @@ partition; their borders are the **folds**, the points where the deployment
 closest to liquidating you hands over to a different one. A single deployment
 cannot have a fold. Seven standardized ones do.
 
-You can watch the standard do this work. `?sources=aave-v3-arbitrum` renders
-the map from one deployment: a ramp, one coast, no borders, and the feed says
-`LONG-ONLY`. Drop the parameter and the same address renders from all seven: a
-ridge, a pass, fault lines and three holdfasts. Nothing in the code changed
-between the two pictures; only how many standardized answers were minimised.
+You can watch the standard do this work. The same live wallet, surveyed on
+the site, first from one deployment and then from all seven. Nothing in the
+code changed between the two pictures; only how many standardized answers
+were minimised.
+
+![One source: one territory, no folds](docs/one-source.png)
+
+`?sources=aave-v3-ethereum`: one territory, one coast, no borders. The feed
+says `1 of 1 answered`, `territories 1`, `ley-veins 0`.
+
+![Seven sources: three territories, two folds, sizes on the banners](docs/seven-sources.png)
+
+The same address from all seven: three territories, two folds, a holdfast on
+each with the size of its market on the banner. `7 of 7 answered`,
+`territories 3`, `ley-veins 2`. A single deployment cannot have a fold.
 
 The data path, in `src/graph/`:
 
