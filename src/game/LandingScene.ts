@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { Ground } from "./ground";
 import { loadUiStock, loadWorldSheets } from "./assets";
-import { UI, label, nine } from "./chrome";
+import { UI, label, nine, soundButton } from "./chrome";
 import { WebFontFile } from "./fonts";
 import { doorLayout } from "./layout";
 import { logical, pinToScreen } from "./screen";
@@ -131,14 +131,8 @@ export class LandingScene extends Phaser.Scene {
     // The veil: the ground shows through, the type does not compete with it.
     this.hud.add(this.add.rectangle(0, 0, W, H, 0x081820, 0.58).setOrigin(0, 0));
 
-    // The sound switch, top right. The browser plays nothing before the first click anywhere; this is as good a first click as any.
-    const toggle = label(this, W - 14, 12, audio.enabled ? "SOUND ON" : "SOUND OFF", { size: 8, font: f.pixel, color: audio.enabled ? T.ley : T.inkDim, align: "right", crisp: true, stroke: { color: T.shellEdge, thickness: 3 } });
-    toggle.setInteractive({ useHandCursor: true }).on("pointerdown", () => {
-      audio.setEnabled(!audio.enabled);
-      audio.sfx("press");
-      this.time.delayedCall(0, () => this.layout());
-    });
-    this.hud.add(toggle);
+    // The speaker, bottom left. The browser plays nothing before the first click anywhere; this is as good a first click as any.
+    this.hud.add(soundButton(this, 12, H - 12 - 30));
 
     // The title.
     const { y: titleY, size } = d.title;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { TerrainMap } from "@/components/TerrainMap";
+import { PixelPlate } from "@/components/PixelPlate";
 import type { Sources } from "@/components/ScreeGame";
 import { MarketsWindow, type MarketsPayload } from "@/components/MarketsWindow";
 import { ReceiptsWindow, type TrailPayload } from "@/components/ReceiptsWindow";
@@ -272,7 +272,7 @@ export default function Page() {
 
       {plate && (
         <div className="plate-overlay" onClick={closePlate} role="dialog" aria-label="Survey plate">
-          <div className="plate-window" onClick={(e) => e.stopPropagation()}>
+          <div className="plate-window plate-window--wide" onClick={(e) => e.stopPropagation()}>
             <header className="plate-head">
               <div>
                 <span className="plate-kicker">THE SURVEY PLATE</span>
@@ -283,10 +283,11 @@ export default function Page() {
               </button>
             </header>
             <p className="plate-note">
-              The same field as the map, drawn as the original hachured contour sheet: price west to east, dwell south to
-              north, the coast at sea level, the pass and the folds marked with their readings. Move over it to read a point.
+              The survey as the world draws it, at a glance: price west to east, dwell south to north, the ground banded from
+              the shelf to the crest, the coast at sea level, ley-lines where the book changes hands, the pass, each holdfast on
+              its ground and the surveyor at today&apos;s price. Move over a tile to read it.
             </p>
-            <TerrainMap baskets={loaded.baskets} spot={loaded.spot} onHover={() => {}} />
+            <PixelPlate baskets={loaded.baskets} spot={loaded.spot} />
           </div>
         </div>
       )}

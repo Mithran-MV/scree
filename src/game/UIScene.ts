@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { UI, button, label, nine } from "./chrome";
+import { UI, button, label, nine, soundButton } from "./chrome";
 import { audio } from "./audio";
 import { loadUiStock } from "./assets";
 import { WebFontFile } from "./fonts";
@@ -127,6 +127,8 @@ export class UIScene extends Phaser.Scene {
   private plate!: Phaser.GameObjects.Container;
   private column!: Phaser.GameObjects.Container;
   private hover!: Phaser.GameObjects.Container;
+  /** The speaker at the foot of the map. */
+  private controls!: Phaser.GameObjects.Container;
   /** The reading panel's height and inset, kept so update() can hold it above the scale as the camera moves. */
   private hoverH = 0;
   private hoverInset = 0;
@@ -163,6 +165,7 @@ export class UIScene extends Phaser.Scene {
     this.bar = this.add.container(0, 0).setDepth(UI_DEPTH.bar);
     this.plate = this.add.container(0, 0).setDepth(UI_DEPTH.plate);
     this.hover = this.add.container(0, 0).setDepth(UI_DEPTH.hover);
+    this.controls = this.add.container(0, 0).setDepth(UI_DEPTH.popup);
     this.popup = this.add.container(0, 0).setDepth(UI_DEPTH.popup).setVisible(false);
 
     this.layout();
@@ -342,8 +345,16 @@ export class UIScene extends Phaser.Scene {
     this.drawBar();
     this.drawFrame();
     this.drawPlate();
+    this.drawControls();
     this.showIdle();
     this.drawColumn();
+  }
+
+  /** The speaker sits in the bottom-left corner of the map, on the scale strip, clear of the reading panel above it. */
+  private drawControls() {
+    const { map: v } = this.lay;
+    this.controls.removeAll(true);
+    this.controls.add(soundButton(this, v.x + 10, v.y + v.h - 10 - 30));
   }
 
   /** The top bar: dark ashlar across the whole width, the title cut into it. */
@@ -359,17 +370,8 @@ export class UIScene extends Phaser.Scene {
     if (!compact) {
       this.bar.add(label(this, narrow ? 112 : 160, Math.round(topBar / 2) - 4, "LIQUIDATION TOPOGRAPHY", { size: TYPE.kicker, font: f.pixel, color: T.ley, tracking: 2, stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
     }
-    // The sound switch sits at the far right; the headline keeps clear of it.
-    const toggle = label(this, W - 14, Math.round(topBar / 2) - 4, audio.enabled ? "SOUND ON" : "SOUND OFF", { size: TYPE.kicker, font: f.pixel, color: audio.enabled ? T.ley : T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true });
-    toggle.setInteractive({ useHandCursor: true }).on("pointerdown", () => {
-      audio.setEnabled(!audio.enabled);
-      audio.sfx("press");
-      // The bar is redrawn after the event, not under the pointer that is still in it.
-      this.time.delayedCall(0, () => this.drawBar());
-    });
-    this.bar.add(toggle);
     const headline = narrow ? s.label : s.headline;
-    this.bar.add(label(this, W - 14 - toggle.width - 16, Math.round(topBar / 2) - 4, headline, { size: TYPE.kicker, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
+    this.bar.add(label(this, W - 14, Math.round(topBar / 2) - 4, headline, { size: TYPE.kicker, font: f.pixel, color: T.inkDim, align: "right", stroke: { color: T.shellEdge, thickness: 3 }, crisp: true }));
   }
 
   /** The bezel: housing around the map viewport under the bar, and the inset lines that make it read as glass. */

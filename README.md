@@ -146,15 +146,19 @@ thirty-day price walks from where the surveyor stands. The ones that cross the
 shoreline drown where they fall, sunk to the chest in the foam; the log reports
 how many came home.
 
-**The plate.** The original hachured contour map, one click away, for readers
-who want the survey without the world.
+**The plate.** The survey drawn the way the world draws the ground, one click
+away: the same terrain grid painted tile by tile in the tileset's palette, the
+coast in foam, the borders as ley-lines, the pass, each holdfast as a keep with
+its banner, today's price where the surveyor stands, and the price and dwell
+scales. Under the pointer, a reading of the tile and what binds there.
 
 **Sound.** A slow theme at the door, a march for the survey, a quicker one
 while the scouts are out; footsteps as the surveyor walks; a sound for each
 thing that happens, from a button to a drowning. All of it is synthesised in
 the browser with the Web Audio API from the tunes in `src/game/music.ts`, no
-audio files, and the switch in the top bar remembers your choice. A browser
-plays nothing before the first click, so the door is quiet until you touch it.
+audio files, and the speaker button at the foot of the map, bottom left, on
+the door too, remembers your choice. A browser plays nothing before the first
+click, so the door is quiet until you touch it.
 
 ## How the ground is drawn
 
@@ -559,7 +563,7 @@ with borders before connecting your own wallet:
 | `src/agent` | HCS-14 identifiers for buyers |
 | `cre` | the confidential workflow, its ledger contract, and the evidence of its runs |
 | `src/field` | the raster and its features |
-| `src/render` | contours, hachures and the survey plate |
+| `src/render` | contours and hachures for the geometry gate, the plate's palette and scale |
 | `src/sim` | the price walks the scouts follow |
 | `src/game` | terrain, tileset, clutter, holdfasts, the three scenes, the surveyor and the leviathans |
 | `scripts` | the geometry gate, the subgraph verifier, the sprite bakery, the topic maker, the scout |

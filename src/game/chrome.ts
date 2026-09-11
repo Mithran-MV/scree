@@ -137,6 +137,66 @@ export function button(scene: Phaser.Scene, x: number, y: number, text: string, 
   return container;
 }
 
+/**
+ * The speaker: a square brass button with a pixel loudspeaker, sound waves
+ * when sound is on and a red stroke through it when it is off. It switches
+ * the engine itself and redraws; the caller only places it.
+ */
+export function soundButton(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Container {
+  const w = 36;
+  const h = 30;
+  const tone = T.brass;
+  const face = nine(scene, UI.button, 0, 0, w, h, 8);
+  const icon = scene.add.graphics();
+  const container = scene.add.container(x, y, [face, icon]);
+  container.setSize(w, h);
+  const draw = () => {
+    const on = audio.enabled;
+    icon.clear();
+    const ink = on ? T.ink : T.inkDim;
+    icon.fillStyle(ink, 1);
+    icon.fillRect(8, 12, 4, 6);
+    icon.fillTriangle(12, 12, 17, 7, 17, 23);
+    icon.fillRect(12, 12, 5, 6);
+    if (on) {
+      icon.lineStyle(2, T.ley, 1);
+      icon.beginPath();
+      icon.arc(18, 15, 4, -0.95, 0.95);
+      icon.strokePath();
+      icon.beginPath();
+      icon.arc(18, 15, 8, -0.8, 0.8);
+      icon.strokePath();
+    } else {
+      icon.lineStyle(2, T.perilBright, 1);
+      icon.beginPath();
+      icon.moveTo(20, 9);
+      icon.lineTo(29, 21);
+      icon.strokePath();
+    }
+  };
+  const rest = () => face.setTint(lighten(tone, 0.1));
+  rest();
+  draw();
+  container.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+  container.on("pointerover", () => {
+    face.setTint(lighten(tone, 0.45));
+    scene.input.setDefaultCursor("pointer");
+    audio.sfx("hover");
+  });
+  container.on("pointerout", () => {
+    rest();
+    scene.input.setDefaultCursor("default");
+  });
+  container.on("pointerdown", () => {
+    face.setTint(darken(tone, 0.25));
+    audio.setEnabled(!audio.enabled);
+    audio.sfx("press");
+    draw();
+  });
+  container.on("pointerup", rest);
+  return container;
+}
+
 export function hex(n: number): string {
   return `#${n.toString(16).padStart(6, "0")}`;
 }

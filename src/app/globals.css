@@ -264,12 +264,15 @@ html, body {
 /* The plate's window: a parchment sheet with a head, a close, and the sheet itself. */
 .plate-window {
   width: min(600px, 100%);
+  min-width: 0;
+  max-width: 100%;
   background: var(--plate);
   border: 1px solid var(--rule);
   box-shadow: 0 0 0 4px #141c22, 0 0 0 5px #3d5461, 0 24px 60px rgba(0, 0, 0, 0.6);
   padding: 14px 16px 16px;
   color: var(--ink-plate, #2b2418);
 }
+.plate-window--wide { width: min(940px, 100%); }
 .plate-head {
   display: flex;
   align-items: flex-start;
@@ -381,4 +384,82 @@ html, body {
 @media (max-width: 600px) {
   .markets-table { font-size: 11.5px; }
   .markets-table th, .markets-table td { padding: 6px 6px; }
+}
+
+/* The survey plate, drawn as the world draws the ground: a framed pixel map, a vellum reading under the pointer, a legend. */
+.pixel-plate {
+  position: relative;
+  background: #0b1116;
+  border: 2px solid #3d5461;
+  box-shadow: inset 0 0 0 2px #141c22;
+  padding: 4px;
+}
+.pixel-plate canvas {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+.pixel-cursor {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid #35e0e8;
+  box-shadow: 0 0 0 1px #0b1116;
+  box-sizing: border-box;
+  z-index: 1;
+}
+.pixel-reading {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  max-width: 240px;
+  padding: 7px 9px;
+  background: #e4d5ad;
+  border: 2px solid #9c8757;
+  box-shadow: 3px 3px 0 #141c22;
+  color: #2b2418;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.pixel-reading b {
+  display: block;
+  margin-bottom: 5px;
+  font-family: var(--font-pixel), monospace;
+  font-weight: 400;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+.pixel-reading .dim { color: #5c4f36; }
+.pixel-plate .pixel-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 6px 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #8fa8b2;
+}
+.pixel-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 6px 6px 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #8fa8b2;
+}
+.pixel-legend i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  border: 1px solid #0b1116;
+  box-shadow: 0 0 0 1px #3d5461;
+}
+@media (max-width: 600px) {
+  .pixel-legend { font-size: 10px; gap: 3px 10px; }
+  .pixel-reading { font-size: 10.5px; max-width: 200px; }
 }
