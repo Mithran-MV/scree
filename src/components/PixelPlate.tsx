@@ -116,15 +116,18 @@ export function PixelPlate({ baskets, spot, onHover }: Props) {
       const s = sample(baskets, price, dwellDays);
       const zone = tile.owner >= 0 ? grid.zones[tile.owner] : undefined;
       const reading: PlateReading = { price, dwellDays, hf: s.z + 1, band: tile.lo, owner: zone?.deploymentId ?? null, exposure: zone?.exposure ?? null, binder: s.binder };
+      // Overlays are positioned from the frame's padding box, inside its border; the client rect starts at the border.
       const hostRect = host.getBoundingClientRect();
+      const left = hostRect.left + host.clientLeft;
+      const top = hostRect.top + host.clientTop;
       setHover({
         reading,
         tx,
         ty,
-        px: event.clientX - hostRect.left,
-        py: event.clientY - hostRect.top,
-        ox: rect.left - hostRect.left,
-        oy: rect.top - hostRect.top,
+        px: event.clientX - left,
+        py: event.clientY - top,
+        ox: rect.left - left,
+        oy: rect.top - top,
         tile: rect.width / grid.cols,
       });
       onHover?.(reading);
