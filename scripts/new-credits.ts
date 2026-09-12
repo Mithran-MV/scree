@@ -65,7 +65,8 @@ try {
       .setSupplyKey(PrivateKey.fromStringECDSA(op.privateKey))
       .setFeeScheduleKey(PrivateKey.fromStringECDSA(op.privateKey))
       .setCustomFees([fee])
-      .setTokenMemo("scree survey credits: one credit buys one source of a survey; a fiftieth of each transfer returns to the service")
+      // A token memo is a hundred bytes at most; the manifest carries the long form.
+      .setTokenMemo("scree survey credits: one credit per source asked; 1/50 of each transfer returns to the service")
       // A token with a fee schedule costs about two dollars at the network's rate; the SDK's default cap is higher than a testnet account holds.
       .setMaxTransactionFee(new Hbar(36))
       .execute(service);

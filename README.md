@@ -360,14 +360,16 @@ scheduled transfer as its settlement. Two ran on testnet: schedules
 [0.0.10477154](https://hashscan.io/testnet/schedule/0.0.10477154), receipts
 #18 and #19 on the topic.
 
-A second rail is written and waits on test funds: `npm run hedera:credits`
-issues SRV, a survey-credit token whose fee schedule returns a fiftieth of
-every transfer to the service, associates the agent and sends it credits;
-the service then offers a second `accepts` entry priced one credit per
-source plus one, the manifest names both rails, and `--rail credits` makes
-the scout pay in credits. Issuing a token with a fee schedule costs about
-two dollars of test HBAR at the network's rate, more than the service
-account holds today.
+A second rail pays in credits. `npm run hedera:credits` issued
+[SRV, token 0.0.10501457](https://hashscan.io/testnet/token/0.0.10501457),
+a survey-credit token whose fee schedule returns a fiftieth of every
+transfer to the service, associated the agent and sent it two hundred
+credits. With `SURVEY_CREDITS_TOKEN` set, the service offers a second
+`accepts` entry priced one credit per source plus one, the manifest names
+both rails, and `--rail credits` makes the scout pay in credits; the receipt
+on the topic then carries the token as its asset. The first such purchase is
+receipt #80: eight SRV for seven sources, settled as
+`0.0.7162784@1789218822.608481484`.
 
 ```
 price     0.01 + 0.005 × 7 sources = 0.045 HBAR per survey

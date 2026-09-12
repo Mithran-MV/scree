@@ -132,6 +132,8 @@ interface Survey {
 
 const usd = (x: number | null) => (x === null || !Number.isFinite(x) ? "—" : `$${x.toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
 let spentTinybar = 0;
+/** Credits paid when the rail is credits; the budget check stays in HBAR at the quote. */
+let spentCredits = 0;
 
 async function survey(address: string): Promise<void> {
   if ((spentTinybar + quoteTinybar) / TINYBAR_PER_HBAR > budgetHbar) {
@@ -155,6 +157,7 @@ async function survey(address: string): Promise<void> {
   const s = JSON.parse(text) as Survey;
   const digest = createHash("sha256").update(bytes).digest("hex");
   spentTinybar += s.metering.priceTinybar;
+  if (rail === "credits") spentCredits += 1 + s.metering.sourcesAsked;
 
   console.log(`  paid      ${rail === "credits" ? `${1 + s.metering.sourcesAsked} ${pay.credits!.symbol}` : `${s.metering.priceHbar} HBAR`} for ${s.metering.sourcesAsked} sources, in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   if (settlement) {
@@ -231,7 +234,8 @@ scheduling ${scheduleCount} surveys of ${address}, one every ${everyMin} min, ${
 
 async function round(): Promise<void> {
   for (const a of addresses) await survey(a);
-  console.log(`\nspent ${hbar(spentTinybar)} of ${budgetHbar} HBAR`);
+  if (rail === "credits") console.log(`\nspent ${spentCredits} ${pay.credits!.symbol} (${hbar(spentTinybar)} HBAR at the quote, of a ${budgetHbar} HBAR budget)`);
+  else console.log(`\nspent ${hbar(spentTinybar)} of ${budgetHbar} HBAR`);
 }
 
 if (scheduleCount > 0) {
