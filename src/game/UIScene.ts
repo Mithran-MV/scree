@@ -337,6 +337,11 @@ export class UIScene extends Phaser.Scene {
       this.drawBar();
       // New market sizes or marks re-letter the banners and the scale.
       if (next.tvl !== undefined) this.raiseBanners();
+      // A new chart (a verdict arriving, a new survey) redraws the reading panel, whatever it is showing.
+      if (next.chart !== undefined && this.hover) {
+        if (this.reading) this.showZone(this.reading);
+        else this.showIdle();
+      }
     }
   }
 

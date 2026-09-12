@@ -70,7 +70,9 @@ Three things on screen come from it:
 
 - **The markets** window (the wide button in the column): one row per
   deployment, every column from the one query, with the block each was read
-  at.
+  at; above the table, two bar charts of the same numbers, borrowed as a
+  share of each book and how far below today's price the high-water mark
+  sits.
 - **Sizes on the banners**: each holdfast's banner carries the size of that
   deployment's market in the charted asset.
 - **High-water marks on the scale**: one flag per deployment at the price
@@ -78,6 +80,8 @@ Three things on screen come from it:
   arithmetic is one line for all of them: today's price × max LTV ÷
   liquidation threshold. A fresh maximum-leverage position stands on that
   cliff, and the flags show how far apart the seven cliffs are.
+
+![The markets window: two bar charts and the table, every number from one query](docs/markets.png)
 
 ## Asking the survey, through a second Graph product
 
@@ -144,6 +148,8 @@ the nearest downside liquidation price against dwell for thirty days, on a
 scale fifteen percent either way so interest reads as the flat line it is,
 with the enclave's lift drawn beneath it when its verdict for the wallet is
 RAISE.
+
+![The reading panel: the tile under the pointer, the ground from there down to the coast, and the crash edge over thirty days](docs/reading.png)
 
 **Scouts.** Two hundred scouts, small soldiers, march out on simulated
 thirty-day price walks from where the surveyor stands. The ones that cross the
@@ -319,9 +325,12 @@ from `/api/survey` by the platform's own account, the way any other agent
 buys it, and the settlement comes back with the reading: the feed shows
 `paid · 0.045 HBAR · settled`, the log names the transaction, and the
 **Receipts** window lists the topic read back through the mirror node, every
-row linked to the explorer. If the purchase cannot be made the survey is read
-directly and the reason is named, so the map is never blank because a payment
-rail was.
+row linked to the explorer, under a chart of what was paid as a running
+total, one marker per receipt. If the purchase cannot be made the survey is
+read directly and the reason is named, so the map is never blank because a
+payment rail was.
+
+![The receipts window: what was paid as a running total, then every receipt on the topic](docs/receipts.png)
 
 The other buyer is `scripts/scout.ts`, an agent with a budget in HBAR. It
 discovers the service from the manifest, refuses any request that would

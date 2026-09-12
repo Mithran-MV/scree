@@ -129,9 +129,22 @@ const scouts = `
     return 'scouts out';
   })()`;
 
+/** Rest the pointer on the ground inland, so the reading panel shows a tile and its two charts. */
+const reading = `
+  (async () => {
+    const g = document.querySelector('.world-host').__game;
+    const v = g.scene.getScene('UIScene').lay.map;
+    g.canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: v.x + v.w * 0.42, clientY: v.y + v.h * 0.55, bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    return 'reading a tile';
+  })()`;
+
 console.log(`capturing from ${base} into ${outDir}/`);
 await capture("one-source", `${base}/?address=${WALLET}&sources=aave-v3-ethereum`, 30);
+await capture("reading", `${base}/?address=${WALLET}`, 30, reading);
 await capture("seven-sources", `${base}/?address=${WALLET}`, 30);
 await capture("survey-plate", `${base}/?address=${WALLET}`, 30, plate);
 await capture("scouts", `${base}/?address=${WALLET}`, 30, scouts);
+await capture("markets", `${base}/?address=${WALLET}`, 30, `(async () => { await ${press(4)}; await new Promise((r) => setTimeout(r, 2500)); return 'markets'; })()`);
+await capture("receipts", `${base}/?address=${WALLET}`, 30, `(async () => { await ${press(5)}; await new Promise((r) => setTimeout(r, 4000)); return 'receipts'; })()`);
 chrome.kill();
