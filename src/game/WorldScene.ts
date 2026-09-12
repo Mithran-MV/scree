@@ -678,6 +678,11 @@ export class WorldScene extends Phaser.Scene {
     return { x: fx * this.worldW, y: dwellFyToTileY(fy, this.opts.grid.rows) * TILE_PX };
   }
 
+  /** Where the surveyor stands, in world units, so the interface can keep its panel off him. */
+  get surveyorPosition(): { x: number; y: number } {
+    return { x: this.surveyor.x, y: this.surveyor.y };
+  }
+
   /* ── walking ──────────────────────────────────────────────────────── */
 
   /** Walk the surveyor to a point on the map. Where he stands is a scenario. */

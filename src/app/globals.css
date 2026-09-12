@@ -463,3 +463,61 @@ html, body {
   .pixel-legend { font-size: 10px; gap: 3px 10px; }
   .pixel-reading { font-size: 10.5px; max-width: 200px; }
 }
+
+/* The windows' charts: one measure each, thin marks on the parchment, the rest in the table. */
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 2px 0 14px;
+}
+@media (max-width: 720px) {
+  .chart-row { grid-template-columns: 1fr; }
+}
+.chart {
+  --c1: #1d7d8c;
+  --c2: #b3471f;
+  --ink: #2b2418;
+  --dim: #5c4f36;
+  --grid: #d9ceb2;
+  --surface: #f5eedc;
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 10px 12px 6px;
+}
+.chart-wide { margin-bottom: 14px; }
+.chart-kicker {
+  display: block;
+  font-family: var(--font-pixel), monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  color: #5c4f36;
+  margin-bottom: 8px;
+}
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { font-family: var(--mono); font-size: 11px; fill: var(--dim); font-variant-numeric: tabular-nums; }
+.chart text.lbl { fill: var(--ink); }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .hit { fill: transparent; }
+.chart .row:hover .bar { opacity: 0.8; }
+.chart-stat { margin: 0 0 6px; font-family: var(--mono); font-size: 18px; color: #2b2418; }
+.chart-stat small { margin-left: 8px; font-size: 11px; color: #5c4f36; }
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: center;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #5c4f36;
+}
+.chart-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}

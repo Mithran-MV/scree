@@ -2,6 +2,7 @@
 
 import type { MarketRow } from "@/graph/markets";
 import { cliffPrice } from "@/graph/markets";
+import { barPath, cliffBelowSpot, ticks, utilisation } from "@/render/charts";
 
 /** What `/api/markets` returns: the second query, fanned to the same deployments as the first. */
 export interface MarketsPayload {
@@ -62,6 +63,7 @@ export function MarketsWindow({ markets, spot, error, onClose }: Props) {
         </p>
         {error && <p className="markets-error">{error}</p>}
         {!markets && !error && <p className="markets-error">Reading the markets…</p>}
+        {markets && <MarketCharts markets={markets} />}
         {markets && (
           <div className="markets-scroll">
             <table className="markets-table">
@@ -107,11 +109,83 @@ export function MarketsWindow({ markets, spot, error, onClose }: Props) {
         )}
         {markets && (
           <p className="plate-note markets-foot">
-            Read at {new Date(markets.readAt).toLocaleTimeString("en-US")}. Every column above comes from one query,
-            <code>Markets</code> in <code>src/graph/query.ts</code>, that names no protocol.
+            Read at {new Date(markets.readAt).toLocaleTimeString("en-US")}. Every bar and column above comes from one
+            query, <code>Markets</code> in <code>src/graph/query.ts</code>, that names no protocol.
           </p>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Two things the table's numbers say, drawn: how much of each book is
+ * borrowed, and how far below today's price a maximum-leverage borrower is
+ * liquidated. One measure per chart, one hue per measure, the value at the
+ * tip of each bar and the rest in the table.
+ */
+function MarketCharts({ markets }: { markets: MarketsPayload }) {
+  const rows = markets.deployments.filter((d) => d.charted).map((d) => ({ id: d.deploymentId, c: d.charted! }));
+  if (rows.length === 0) return null;
+  return (
+    <div className="chart-row">
+      <Bars
+        title="BORROWED, AS A SHARE OF THE BOOK"
+        colour="var(--c1)"
+        rows={rows.map((r) => ({ id: r.id, value: utilisation(r.c.borrowedUSD, r.c.tvlUSD), hint: `${size(r.c.borrowedUSD)} of ${size(r.c.tvlUSD)}` }))}
+      />
+      <Bars
+        title="HIGH-WATER MARK, BELOW TODAY'S PRICE"
+        colour="var(--c2)"
+        rows={rows.map((r) => ({ id: r.id, value: cliffBelowSpot(r.c.maximumLTV, r.c.liquidationThreshold), hint: `max LTV ${pct(r.c.maximumLTV)} over threshold ${pct(r.c.liquidationThreshold)}` }))}
+      />
+    </div>
+  );
+}
+
+/** Horizontal bars of one measure in [0, 1], the deployment's name on the left and its value at the tip. */
+function Bars({ title, colour, rows }: { title: string; colour: string; rows: { id: string; value: number; hint: string }[] }) {
+  const W = 460;
+  const rowH = 24;
+  const barH = 14;
+  const x0 = 156;
+  const x1 = 400;
+  const top = 6;
+  const max = Math.max(0.05, ...rows.map((r) => r.value));
+  const axis = ticks(max, 4);
+  const scaleMax = axis[axis.length - 1]!;
+  const X = (v: number) => x0 + ((x1 - x0) * v) / scaleMax;
+  const H = top + rows.length * rowH + 26;
+  return (
+    <figure className="chart">
+      <span className="chart-kicker">{title}</span>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
+        {axis.map((v) => (
+          <line key={v} className="grid" x1={X(v)} x2={X(v)} y1={top} y2={top + rows.length * rowH} />
+        ))}
+        {rows.map((r, i) => {
+          const y = top + i * rowH + (rowH - barH) / 2;
+          const w = Math.max(0, X(r.value) - x0);
+          return (
+            <g key={r.id} className="row">
+              <title>{`${r.id}: ${pct(r.value)} (${r.hint})`}</title>
+              <rect className="hit" x={0} y={top + i * rowH} width={W} height={rowH} />
+              <text className="lbl" x={x0 - 10} y={y + barH / 2 + 4} textAnchor="end">
+                {r.id}
+              </text>
+              {w > 0 && <path className="bar" d={barPath(x0, y, w, barH)} fill={colour} />}
+              <text x={x0 + w + 6} y={y + barH / 2 + 4}>
+                {pct(r.value)}
+              </text>
+            </g>
+          );
+        })}
+        {axis.map((v) => (
+          <text key={`t${v}`} x={X(v)} y={H - 8} textAnchor="middle">
+            {`${Math.round(v * 100)}%`}
+          </text>
+        ))}
+      </svg>
+    </figure>
   );
 }

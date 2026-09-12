@@ -136,6 +136,7 @@ export class UIScene extends Phaser.Scene {
   private controls!: Phaser.GameObjects.Container;
   /** The reading panel's height and inset, kept so update() can hold it above the scale as the camera moves. */
   private hoverH = 0;
+  private hoverW = 0;
   private hoverInset = 0;
   private popup!: Phaser.GameObjects.Container;
   private popupTween: Phaser.Tweens.Tween | undefined;
@@ -273,8 +274,11 @@ export class UIScene extends Phaser.Scene {
     const cam = this.world.cameras.main;
     const { D } = logical(this);
     const v = this.lay.map;
-    // The scale moves under the panel as the camera zooms and pans; the camera's view is only current once a frame has been prepared.
-    if (this.hoverH > 0) this.hover.y = this.hoverBottom(v, this.hoverH, this.hoverInset) - this.hoverH;
+    // The scale moves under the panel as the camera zooms and pans, and the surveyor walks; the camera's view is only current once a frame has been prepared.
+    if (this.hoverH > 0) {
+      this.hover.y = this.hoverBottom(v, this.hoverH, this.hoverInset) - this.hoverH;
+      this.hover.x = this.hoverLeft(v, this.hoverW, this.hoverInset);
+    }
     // The world camera works in device pixels; this scene in CSS pixels.
     const sx = (wx: number) => (cam.x + (wx - cam.worldView.x) * cam.zoom) / D;
     const sy = (wy: number) => (cam.y + (wy - cam.worldView.y) * cam.zoom) / D;
@@ -432,8 +436,8 @@ export class UIScene extends Phaser.Scene {
     const chartW = 132;
     const chartH = 84;
     const gap = 10;
-    // Two charts when there is room, the ground here and the crash edge; one when there is less; none on a phone.
-    const charts: Array<"ground" | "edge"> = maxW >= 600 ? ["ground", "edge"] : maxW >= 380 ? [this.reading ? "ground" : "edge"] : [];
+    // One chart, the one that is about what is being read: the ground under the pointer while there is a tile, the wallet's crash edge otherwise. None on a phone.
+    const charts: Array<"ground" | "edge"> = maxW >= 380 ? [this.reading ? "ground" : "edge"] : [];
     const chartsW = charts.length ? charts.length * chartW + (charts.length - 1) * gap : 0;
     const textW = charts.length ? Math.min(250, maxW - chartsW - 12 - pad * 2) : Math.min(360, maxW - pad * 2);
     const w = charts.length ? pad + textW + 12 + chartsW + pad : pad + textW + pad;
@@ -447,8 +451,9 @@ export class UIScene extends Phaser.Scene {
       : null;
     const h = pad + block + (caption ? 6 + caption.height : 0) + pad - 2;
     this.hoverH = h;
+    this.hoverW = w;
     this.hoverInset = inset;
-    this.hover.setPosition(v.x + inset, this.hoverBottom(v, h, inset) - h);
+    this.hover.setPosition(this.hoverLeft(v, w, inset), this.hoverBottom(v, h, inset) - h);
     const parts: Phaser.GameObjects.GameObject[] = [nine(this, UI.panel, 0, 0, w, h), t, b];
     if (caption) parts.push(caption);
     let cx = pad + textW + 12;
@@ -742,6 +747,24 @@ export class UIScene extends Phaser.Scene {
     const axisTop = (cam.y + (this.world.worldHeight - cam.worldView.y) * cam.zoom) / D;
     const above = axisTop - 6;
     return above < floor && above - h > v.y + 48 ? above : floor;
+  }
+
+  /**
+   * Where the reading panel's left edge goes: the map's bottom-left corner,
+   * unless the surveyor stands under it, in which case the bottom-right,
+   * so he is never hidden by his own reading.
+   */
+  private hoverLeft(v: Rect, w: number, inset: number): number {
+    const left = v.x + inset;
+    const right = v.x + v.w - inset - w;
+    const cam = this.world?.cameras?.main;
+    if (!cam || right <= left) return left;
+    const { D } = logical(this);
+    const s = this.world.surveyorPosition;
+    const sx = (cam.x + (s.x - cam.worldView.x) * cam.zoom) / D;
+    const sy = (cam.y + (s.y - cam.worldView.y) * cam.zoom) / D;
+    const underPanel = sx > left - 24 && sx < left + w + 24 && sy > this.hover.y - 8;
+    return underPanel ? right : left;
   }
 
   private showCitadel(c: CitadelHover) {
