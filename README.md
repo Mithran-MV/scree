@@ -137,9 +137,13 @@ depth of the water it swims in and whose water it is.
 
 **The reading panel.** Hover anywhere and the box in the corner names the
 deployment that owns the ground, the price, the dwell, the health factor and
-the exact liquidation threshold at that dwell. Beside it, the terrace-depth
-graph: the crash edge against dwell, and where a proposed lift in health would
-move it.
+the exact liquidation threshold at that dwell. Beside it, two small charts.
+The ground here: health along price at that dwell, from beyond the coast past
+the point you are reading, the sea at zero, on a fixed scale. The crash edge:
+the nearest downside liquidation price against dwell for thirty days, on a
+scale fifteen percent either way so interest reads as the flat line it is,
+with the enclave's lift drawn beneath it when its verdict for the wallet is
+RAISE.
 
 **Scouts.** Two hundred scouts, small soldiers, march out on simulated
 thirty-day price walks from where the surveyor stands. The ones that cross the

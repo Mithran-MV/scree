@@ -18,6 +18,7 @@ import {
 import { T } from "./theme";
 import type { Anchor, WorldScene } from "./WorldScene";
 import { AXIS_H } from "./WorldScene";
+import { PROFILE_SCALE } from "../core/terrace";
 
 export interface FeedRow {
   key: string;
@@ -28,10 +29,12 @@ export interface FeedRow {
 export interface TerraceChart {
   /** Crash liquidation price against dwell, in days. */
   curve: { t: number; price: number }[];
-  /** The same curve with the proposed terrace's lift applied. */
+  /** The same curve with the enclave's lift applied, when its verdict is RAISE. */
   lifted: { t: number; price: number }[] | null;
-  /** The terrace's dwell band, in days. */
+  /** Where the lift applies, in days. */
   band: { lo: number; hi: number } | null;
+  /** The fixed price scale the edge is drawn on, so a flat edge looks flat. */
+  scale: { lo: number; hi: number } | null;
   note: string;
 }
 
@@ -127,6 +130,8 @@ export class UIScene extends Phaser.Scene {
   private plate!: Phaser.GameObjects.Container;
   private column!: Phaser.GameObjects.Container;
   private hover!: Phaser.GameObjects.Container;
+  /** The tile under the pointer, or null when it is off the map: the ground chart is drawn from it. */
+  private reading: ZoneReading | null = null;
   /** The speaker at the foot of the map. */
   private controls!: Phaser.GameObjects.Container;
   /** The reading panel's height and inset, kept so update() can hold it above the scale as the camera moves. */
@@ -425,14 +430,17 @@ export class UIScene extends Phaser.Scene {
     const inset = narrow ? 8 : 14;
     const maxW = v.w - inset * 2;
     const chartW = 132;
-    const chartH = 68;
-    const withChart = maxW >= 380;
-    const textW = withChart ? Math.min(250, maxW - chartW - 12 - pad * 2) : Math.min(360, maxW - pad * 2);
-    const w = withChart ? pad + textW + 12 + chartW + pad : pad + textW + pad;
+    const chartH = 84;
+    const gap = 10;
+    // Two charts when there is room, the ground here and the crash edge; one when there is less; none on a phone.
+    const charts: Array<"ground" | "edge"> = maxW >= 600 ? ["ground", "edge"] : maxW >= 380 ? [this.reading ? "ground" : "edge"] : [];
+    const chartsW = charts.length ? charts.length * chartW + (charts.length - 1) * gap : 0;
+    const textW = charts.length ? Math.min(250, maxW - chartsW - 12 - pad * 2) : Math.min(360, maxW - pad * 2);
+    const w = charts.length ? pad + textW + 12 + chartsW + pad : pad + textW + pad;
     this.hover.removeAll(true);
     const t = label(this, pad, pad - 3, title, { size: TYPE.kicker, font: f.pixel, color: T.vellumInk, wrap: textW, crisp: true });
     const b = label(this, pad, pad + t.height + 5, body, { size: TYPE.body, font: f.serif, color: T.vellumInkDim, wrap: textW });
-    const block = Math.max(t.height + 5 + b.height, withChart ? chartH + 12 : 0);
+    const block = Math.max(t.height + 5 + b.height, charts.length ? chartH + 12 : 0);
     const showCaption = Boolean(this.state.chart.note) && !narrow;
     const caption = showCaption
       ? label(this, pad, pad + block + 6, this.state.chart.note, { size: TYPE.caption, font: f.mono, color: T.vellumInk, wrap: w - pad * 2 })
@@ -443,34 +451,89 @@ export class UIScene extends Phaser.Scene {
     this.hover.setPosition(v.x + inset, this.hoverBottom(v, h, inset) - h);
     const parts: Phaser.GameObjects.GameObject[] = [nine(this, UI.panel, 0, 0, w, h), t, b];
     if (caption) parts.push(caption);
-    if (withChart) parts.push(...this.miniChart(pad + textW + 12, pad, chartW, chartH));
+    let cx = pad + textW + 12;
+    for (const kind of charts) {
+      parts.push(...(kind === "ground" ? this.groundChart(cx, pad, chartW, chartH, this.reading) : this.edgeChart(cx, pad, chartW, chartH)));
+      cx += chartW + gap;
+    }
     this.hover.add(parts);
   }
 
-  /** Terrace depth in miniature: the crash edge against dwell, the proposed band shaded, the lifted curve beneath. */
-  private miniChart(x: number, y: number, w: number, h: number): Phaser.GameObjects.GameObject[] {
+  /** A chart's box and its kicker; the plot area sits inside with room for a row of axis labels under it. */
+  private chartBox(x: number, y: number, w: number, h: number, title: string): { g: Phaser.GameObjects.Graphics; head: Phaser.GameObjects.Text; px: number; py: number; pw: number; ph: number } {
     const f = this.opts.fonts;
-    const { curve, lifted, band } = this.state.chart;
     const g = this.add.graphics();
     g.fillStyle(0xffffff, 0.35);
-    g.fillRect(x, y + 12, w, h - 12);
+    g.fillRect(x, y + 12, w, h - 24);
     g.lineStyle(1, T.vellumEdge, 0.7);
-    g.strokeRect(x, y + 12, w, h - 12);
-    const head = label(this, x, y - 3, "TERRACE DEPTH", { size: TYPE.kicker, font: f.pixel, color: T.vellumInkDim, crisp: true });
-    if (curve.length < 2) return [g, head];
-    const px = x + 4;
-    const py = y + 16;
-    const pw = w - 8;
-    const ph = h - 20;
-    const all = [...curve, ...(lifted ?? [])].map((c) => c.price);
-    const lo = Math.min(...all);
-    const hi = Math.max(...all);
-    const span = Math.max(hi - lo, hi * 0.01);
+    g.strokeRect(x, y + 12, w, h - 24);
+    const head = label(this, x, y - 3, title, { size: TYPE.kicker, font: f.pixel, color: T.vellumInkDim, crisp: true });
+    return { g, head, px: x + 4, py: y + 16, pw: w - 8, ph: h - 32 };
+  }
+
+  /**
+   * The ground here: health along price at this dwell, from beyond the coast
+   * past the point read, on a fixed scale with the sea at zero. The coast is
+   * the dotted line, the point read is the dot, and the wash is the water.
+   */
+  private groundChart(x: number, y: number, w: number, h: number, r: ZoneReading | null): Phaser.GameObjects.GameObject[] {
+    const f = this.opts.fonts;
+    const { g, head, px, py, pw, ph } = this.chartBox(x, y, w, h, "THE GROUND HERE");
+    const parts: Phaser.GameObjects.GameObject[] = [g, head];
+    if (!r || r.profile.length < 2) {
+      parts.push(label(this, x + 6, y + 24, "Move over a tile to see the ground from where you stand down to the water.", { size: 9, font: f.mono, color: T.vellumInkDim, wrap: w - 12 }));
+      return parts;
+    }
+    const prof = r.profile;
+    const lo = prof[0]!.price;
+    const hi = prof[prof.length - 1]!.price;
+    const X = (p: number) => px + (Math.log(p / lo) / Math.log(hi / lo)) * pw;
+    const Y = (z: number) => py + ph - ((Phaser.Math.Clamp(z, PROFILE_SCALE.lo, PROFILE_SCALE.hi) - PROFILE_SCALE.lo) / (PROFILE_SCALE.hi - PROFILE_SCALE.lo)) * ph;
+    const sea = Y(0);
+    g.fillStyle(T.leyDim, 0.25);
+    g.fillRect(px, sea, pw, py + ph - sea);
+    g.lineStyle(1, T.leyDim, 0.9);
+    g.lineBetween(px, sea, px + pw, sea);
+    g.lineStyle(1.5, T.vellumInk, 0.95);
+    g.beginPath();
+    prof.forEach((p, i) => (i === 0 ? g.moveTo(X(p.price), Y(p.z)) : g.lineTo(X(p.price), Y(p.z))));
+    g.strokePath();
+    if (r.liquidationPrice !== null && r.liquidationPrice > lo && r.liquidationPrice < hi) {
+      const coast = X(r.liquidationPrice);
+      g.lineStyle(1, T.peril, 0.9);
+      for (let yy = py; yy < py + ph; yy += 4) g.lineBetween(coast, yy, coast, yy + 2);
+    }
+    const dotX = X(r.price);
+    const dotY = Y(r.hf - 1);
+    g.fillStyle(r.drowned ? T.peril : T.ley, 1);
+    g.fillCircle(dotX, dotY, 3);
+    g.lineStyle(1, T.vellumInk, 1);
+    g.strokeCircle(dotX, dotY, 3);
+    const axisY = y + h - 11;
+    parts.push(label(this, x, axisY, usd0(lo), { size: 8, font: f.mono, color: T.vellumInkDim }));
+    parts.push(label(this, x + w, axisY, usd0(hi), { size: 8, font: f.mono, color: T.vellumInkDim, align: "right" }));
+    parts.push(label(this, px + 2, py - 1, "health 2", { size: 8, font: f.mono, color: T.vellumInkDim }));
+    parts.push(label(this, px + pw - 2, sea - 10, "sea", { size: 8, font: f.mono, color: T.leyDim, align: "right" }));
+    return parts;
+  }
+
+  /**
+   * The crash edge against dwell on a fixed scale, fifteen percent either
+   * way, so thirty days of interest reads as the flat line it is. When the
+   * enclave's verdict is RAISE its lift is drawn beneath, over the band it holds.
+   */
+  private edgeChart(x: number, y: number, w: number, h: number): Phaser.GameObjects.GameObject[] {
+    const f = this.opts.fonts;
+    const { curve, lifted, band, scale } = this.state.chart;
+    const days = curve.length ? Math.round(curve[curve.length - 1]!.t) : 30;
+    const { g, head, px, py, pw, ph } = this.chartBox(x, y, w, h, `CRASH EDGE · ${days}D`);
+    const parts: Phaser.GameObjects.GameObject[] = [g, head];
+    if (curve.length < 2 || !scale) return parts;
     const tMax = curve[curve.length - 1]!.t;
     const X = (t: number) => px + (t / tMax) * pw;
-    const Y = (p: number) => py + ph - ((p - (lo - span * 0.15)) / (span * 1.3)) * ph;
+    const Y = (p: number) => py + ph - ((Phaser.Math.Clamp(p, scale.lo, scale.hi) - scale.lo) / (scale.hi - scale.lo)) * ph;
     if (band) {
-      g.fillStyle(T.ley, 0.22);
+      g.fillStyle(T.ley, 0.18);
       g.fillRect(X(band.lo), py, Math.max(2, X(band.hi) - X(band.lo)), ph);
     }
     const stroke = (pts: { t: number; price: number }[], colour: number) => {
@@ -481,8 +544,12 @@ export class UIScene extends Phaser.Scene {
     };
     stroke(curve, T.peril);
     if (lifted) stroke(lifted, T.leyDim);
-    const axis = label(this, x + w, y + h - 10, `${Math.round(tMax)}d`, { size: 9, font: f.mono, color: T.vellumInkDim, align: "right" });
-    return [g, head, axis];
+    const axisY = y + h - 11;
+    parts.push(label(this, x, axisY, "0d", { size: 8, font: f.mono, color: T.vellumInkDim }));
+    parts.push(label(this, x + w, axisY, `${days}d`, { size: 8, font: f.mono, color: T.vellumInkDim, align: "right" }));
+    parts.push(label(this, px + 2, py - 1, usd0(scale.hi), { size: 8, font: f.mono, color: T.vellumInkDim }));
+    parts.push(label(this, px + 2, py + ph - 9, usd0(scale.lo), { size: 8, font: f.mono, color: T.vellumInkDim }));
+    return parts;
   }
 
   /** The instrument column: controls, feed, log. Beside the map, or under it. */
@@ -644,10 +711,12 @@ export class UIScene extends Phaser.Scene {
   /* ── hover box ────────────────────────────────────────────────────── */
 
   private showIdle() {
+    this.reading = null;
     this.showHover("THE GROUND", this.lay.narrow ? "Tap the map to read it; the surveyor walks there." : "Move over the map to read it. Click, and the surveyor walks there.");
   }
 
   private showZone(r: ZoneReading) {
+    this.reading = r;
     const who = r.deploymentId ? r.deploymentId.toUpperCase() : "OPEN WATER";
     const threshold =
       r.liquidationPrice !== null

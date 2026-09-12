@@ -1,4 +1,5 @@
 import type { Exposure } from "../core/types";
+import type { ProfilePoint } from "../core/terrace";
 
 /** Events the world raises for the interface. The world never draws UI; the interface never reads terrain. */
 export const EV = {
@@ -34,6 +35,8 @@ export interface ZoneReading {
   /** Price at which that deployment liquidates the book at this dwell. */
   liquidationPrice: number | null;
   drowned: boolean;
+  /** The ground along price at this dwell, from beyond the coast past this point. */
+  profile: ProfilePoint[];
 }
 
 export interface CitadelHover {

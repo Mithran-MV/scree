@@ -13,6 +13,7 @@ import { bandOf, buildTerrainGrid, mapFxOf, surveyWindow, warpFx } from "@/game/
 import type { ZoneReading } from "@/game/events";
 import type { PriceMark, PriceTick, ScoutPath, WorldData, WorldScene } from "@/game/WorldScene";
 import { cliffPrice } from "@/graph/markets";
+import { crashEdgeCurve, edgeScale, groundProfile, liftedEdge } from "@/core/terrace";
 import type { MarketsPayload } from "./MarketsWindow";
 import type { FeedRow, PushedState, TerraceChart, UIData, UIScene } from "@/game/UIScene";
 import type { LandingScene } from "@/game/LandingScene";
@@ -81,29 +82,16 @@ interface Props {
   onReceipts: () => void;
 }
 
-/** A defence terrace: a price band × dwell band the user raises by `liftHF`. */
-interface Terrace {
-  priceFxLo: number;
-  priceFxHi: number;
-  dwellFyLo: number;
-  dwellFyHi: number;
-  liftHF: number;
-  label: string;
-}
-
 const usd = (x: number | null) =>
   x === null || !Number.isFinite(x) ? "—" : `$${x.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const CHART_POINTS = 31;
 
-/** The proposed terrace: a strip around the crash edge, held for two days, lifted by 0.08 health. */
-const PROPOSED = { below: 0.98, above: 1.06, days: 2, lift: 0.08 };
-
 /**
  * Mounts the survey.
  *
  * Everything the scenes show is derived here from the book: the terrain grid,
- * the reading at any point, the terraces, the feed and the chart. The scenes
+ * the reading at any point, the feed and the charts. The scenes
  * get data and callbacks; they never touch the arithmetic.
  */
 export function ScreeGame(props: Props) {
@@ -168,6 +156,7 @@ export function ScreeGame(props: Props) {
         exposure: basket ? exposure(basket) : null,
         liquidationPrice: basket ? liquidationPrice(basket, t) : null,
         drowned: z < 0,
+        profile: groundProfile(baskets, price, dwellDays, basket ? liquidationPrice(basket, t) : null, basket ? exposure(basket) : null),
       };
     },
     [axes, baskets, grid.ceiling],
@@ -204,49 +193,28 @@ export function ScreeGame(props: Props) {
     return out;
   }, [props.markets]);
 
-  /* ── the terrace: the user's defence, drawn in the reading panel ── */
-
-  const terraces = useMemo<Terrace[]>(() => {
-    if (br.lower === null) return [];
-    return [
-      {
-        priceFxLo: mapFxOf(axes.fxOf(br.lower * PROPOSED.below), 0),
-        priceFxHi: mapFxOf(axes.fxOf(br.lower * PROPOSED.above), 0),
-        dwellFyLo: 0,
-        dwellFyHi: axes.fyOf(PROPOSED.days),
-        liftHF: PROPOSED.lift,
-        label: "proposed",
-      },
-    ];
-  }, [br.lower, axes]);
+  /* ── the crash edge against dwell, and what the enclave's verdict does to it ── */
 
   const chart = useMemo<TerraceChart>(() => {
-    const curve: { t: number; price: number }[] = [];
-    for (let i = 0; i < CHART_POINTS; i++) {
-      const t = (i / (CHART_POINTS - 1)) * win.dwellHigh;
-      const p = bracket(baskets, dwellYears(t)).lower;
-      if (p !== null && Number.isFinite(p)) curve.push({ t, price: p });
-    }
-    const terrace = terraces[0];
-    if (!terrace || curve.length < 2) return { curve, lifted: null, band: null, note: "" };
-    // Lifting health by Δ at today's price means scaling collateral by
-    // (H + Δ) / H, which moves the crash edge down by the inverse ratio.
-    // First order, and the note says so.
-    const ratio = healthToday / (healthToday + terrace.liftHF);
-    const hiDays = terrace.dwellFyHi * win.dwellHigh;
-    const lifted = curve.map((c) => ({ t: c.t, price: c.t <= hiDays ? c.price * ratio : c.price }));
+    const curve = crashEdgeCurve(baskets, win.dwellHigh, CHART_POINTS);
+    if (curve.length < 2) return { curve, lifted: null, band: null, scale: null, note: "" };
     const edge = curve[0]!.price;
-    return {
-      curve,
-      lifted,
-      band: { lo: 0, hi: hiDays },
-      note:
-        `Proposed: +${terrace.liftHF.toFixed(2)} health for ${PROPOSED.days}d moves the crash edge from ${usd(edge)} to ${usd(edge * ratio)} (first order).` +
-        (props.guardian?.verdict
-          ? ` Enclave: ${props.guardian.verdict}${props.guardian.lift ? ` +${props.guardian.lift.toFixed(2)}` : ""}, policy ${props.guardian.policyHash?.slice(2, 8)}.`
-          : ""),
-    };
-  }, [baskets, win, terraces, healthToday, props.guardian]);
+    const end = curve[curve.length - 1]!.price;
+    const days = Math.round(win.dwellHigh);
+    const g = props.guardian;
+    const raise = g?.verdict === "RAISE" && g.lift && g.lift > 0 ? g.lift : null;
+    const lifted = raise ? liftedEdge(curve, healthToday, raise) : null;
+    const drift = `Interest alone moves it to ${usd(end)} after ${days} days.`;
+    const note =
+      lifted && raise
+        ? `Enclave: RAISE +${raise.toFixed(2)} health moves the crash edge from ${usd(edge)} to ${usd(lifted[0]!.price)} while the verdict stands (first order). ${drift}`
+        : g?.verdict === "HOLD"
+          ? `Enclave: HOLD. The crash edge is ${usd(edge)} today. ${drift}`
+          : g?.verdict === "DROWNED"
+            ? `Enclave: DROWNED at its reading. The crash edge is ${usd(edge)} today. ${drift}`
+            : `No enclave verdict on this wallet. The crash edge is ${usd(edge)} today. ${drift}`;
+    return { curve, lifted, band: raise ? { lo: 0, hi: win.dwellHigh } : null, scale: edgeScale(edge), note };
+  }, [baskets, win, healthToday, props.guardian]);
 
   /* ── the feed ─────────────────────────────────────────────────── */
 
