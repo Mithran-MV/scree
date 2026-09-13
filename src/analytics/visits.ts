@@ -103,8 +103,9 @@ export function visitsFile(env: Record<string, string | undefined> = process.env
 }
 
 export async function appendVisit(file: string, visit: Visit): Promise<void> {
-  await mkdir(dirname(file), { recursive: true });
-  await appendFile(file, `${JSON.stringify(visit)}\n`, "utf8");
+  // Owner-only: the server is shared, and the count is nobody else's to read.
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  await appendFile(file, `${JSON.stringify(visit)}\n`, { encoding: "utf8", mode: 0o600 });
 }
 
 /** Every visit in the file; a torn or foreign line is skipped, a missing file is no visits. */
