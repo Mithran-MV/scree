@@ -41,7 +41,9 @@ describe("who counts", () => {
   });
 
   it("reads the client address from the proxy and accepts only its own origin", () => {
-    expect(clientIp(headers({ "x-forwarded-for": "198.51.100.4, 10.0.0.1" }))).toBe("198.51.100.4");
+    // Apache appends what it saw, so a forged first entry is ignored
+    expect(clientIp(headers({ "x-forwarded-for": "203.0.113.66, 198.51.100.4" }))).toBe("198.51.100.4");
+    expect(clientIp(headers({ "x-forwarded-for": "198.51.100.4" }))).toBe("198.51.100.4");
     expect(clientIp(headers({}))).toBe("unknown");
     expect(sameSite(headers({ host: "scree.hacklabs.in", origin: "https://scree.hacklabs.in" }))).toBe(true);
     expect(sameSite(headers({ host: "scree.hacklabs.in", origin: "https://evil.example" }))).toBe(false);
@@ -67,6 +69,12 @@ describe("who counts", () => {
       r: "ethglobal.com",
       m: 0,
     });
+    const located = toVisit({ p: "/" }, { ...ctx, locate: (ip) => (ip === "198.51.100.4" ? { c: "IN", l: "Bengaluru, Karnataka" } : null) });
+    expect(located).toMatchObject({ c: "IN", l: "Bengaluru, Karnataka" });
+    const countryOnly = toVisit({ p: "/" }, { ...ctx, locate: () => ({ c: "DE", l: "" }) });
+    expect(countryOnly?.c).toBe("DE");
+    expect(countryOnly && "l" in countryOnly).toBe(false);
+    expect(toVisit({ p: "/" }, { ...ctx, locate: () => null })).not.toHaveProperty("c");
     expect(toVisit({ p: "stats" }, ctx)).toBeNull();
     expect(toVisit(null, ctx)).toBeNull();
     expect(toVisit("/", ctx)).toBeNull();
@@ -105,10 +113,10 @@ describe("counting", () => {
     const day = 86_400_000;
     const v = (t: number, id: string, extra: Partial<Visit> = {}): Visit => ({ t, v: id, p: "/", a: 0, r: "", m: 0, ...extra });
     const visits = [
-      v(now - 60_000, "alice"),
-      v(now - 30_000, "alice", { a: 1 }),
-      v(now - 10_000, "bob", { m: 1, r: "ethglobal.com" }),
-      v(now - 3 * day, "carol", { r: "github.com" }),
+      v(now - 60_000, "alice", { c: "IN", l: "Bengaluru, Karnataka" }),
+      v(now - 30_000, "alice", { a: 1, c: "IN", l: "Bengaluru, Karnataka" }),
+      v(now - 10_000, "bob", { m: 1, r: "ethglobal.com", c: "IN", l: "Chennai, Tamil Nadu" }),
+      v(now - 3 * day, "carol", { r: "github.com", c: "US", l: "Brooklyn, New York" }),
       v(now - 10 * day, "dave", { r: "github.com", a: 1 }),
     ];
     const s = summarise(visits, now, "UTC", 30);
@@ -124,6 +132,13 @@ describe("counting", () => {
     expect(s.referrers[1]).toEqual({ host: "", visitors: 1, views: 2 });
     expect(s.devices).toEqual({ mobile: 1, desktop: 3 });
     expect(s.withAddress).toEqual({ views: 2, visitors: 2 });
+    expect(s.located).toBe(3);
+    expect(s.countries).toEqual([
+      { code: "IN", visitors: 2, views: 3 },
+      { code: "US", visitors: 1, views: 1 },
+    ]);
+    expect(s.cities[0]).toEqual({ code: "IN", place: "Bengaluru, Karnataka", visitors: 1, views: 2 });
+    expect(s.cities.map((c) => c.place)).toEqual(["Bengaluru, Karnataka", "Brooklyn, New York", "Chennai, Tamil Nadu"]);
     expect(s.firstAt).toBe(now - 10 * day);
     expect(s.lastAt).toBe(now - 10_000);
   });
@@ -155,6 +170,15 @@ describe("the page", () => {
     const html = renderStats(summarise([], now, "UTC"));
     expect(html).toContain("No visits counted yet");
     expect(html).toContain('name="robots" content="noindex, nofollow"');
+  });
+
+  it("names countries with their flags and escapes place names", () => {
+    const html = renderStats(summarise([{ t: now, v: "x", p: "/", a: 0, r: "", m: 0, c: "IN", l: "<b>Pune</b>" }], now, "UTC"));
+    expect(html).toContain("India");
+    expect(html).toContain("\u{1F1EE}\u{1F1F3}");
+    expect(html).toContain("&lt;b&gt;Pune&lt;/b&gt;");
+    expect(html).toContain("1 of 1 visitor located");
+    expect(html).toContain("IP Geolocation by DB-IP");
   });
 
   it("escapes what visitors control", () => {

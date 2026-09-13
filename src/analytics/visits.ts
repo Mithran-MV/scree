@@ -4,7 +4,8 @@
  * The page sends one small beacon when it loads. The server keeps no IP
  * address and sets nothing on the visitor's device: it stores a sixteen-hex
  * hash of the address and the user agent under a secret salt, so the same
- * browser counts once without being identifiable from the file. Crawlers,
+ * browser counts once without being identifiable from the file. The country
+ * and city come from a local database on the server. Crawlers,
  * link previews and headless browsers are not counted. The file is one JSON
  * line per view, kept outside the checkout, and read only by the
  * password-protected stats page.
@@ -12,6 +13,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { Locate } from "./geo";
 
 export interface Visit {
   /** When, in milliseconds since the epoch. */
@@ -26,6 +28,10 @@ export interface Visit {
   r: string;
   /** 1 on a touch device. */
   m: 0 | 1;
+  /** Country code, when the address could be located. */
+  c?: string;
+  /** "City, Region", when the database knows it. */
+  l?: string;
 }
 
 type HeaderGet = (name: string) => string | null;
@@ -42,10 +48,14 @@ export function visitorId(ip: string, ua: string, salt: string): string {
   return createHash("sha256").update(`${salt}|${ip}|${ua}`).digest("hex").slice(0, 16);
 }
 
-/** The first address in the proxy's forwarding header, which Apache sets. */
+/**
+ * The client's address from the proxy's forwarding header. Apache appends
+ * the address it saw to whatever the client sent, so the last entry is the
+ * one to trust; a first entry can be forged.
+ */
 export function clientIp(get: HeaderGet): string {
   const fwd = get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]!.trim() || "unknown";
+  if (fwd) return fwd.split(",").map((s) => s.trim()).filter(Boolean).pop() || "unknown";
   return get("x-real-ip")?.trim() || "unknown";
 }
 
@@ -79,11 +89,14 @@ export function refererHost(ref: string, ownHost: string | null): string {
 }
 
 /** A beacon body turned into a stored visit, or null when it is not one. */
-export function toVisit(body: unknown, ctx: { ip: string; ua: string; salt: string; now: number; ownHost: string | null }): Visit | null {
+export function toVisit(
+  body: unknown,
+  ctx: { ip: string; ua: string; salt: string; now: number; ownHost: string | null; locate?: Locate },
+): Visit | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
   if (typeof b.p !== "string" || !b.p.startsWith("/")) return null;
-  return {
+  const visit: Visit = {
     t: ctx.now,
     v: visitorId(ctx.ip, ctx.ua, ctx.salt),
     p: b.p.slice(0, 64),
@@ -91,6 +104,12 @@ export function toVisit(body: unknown, ctx: { ip: string; ua: string; salt: stri
     r: refererHost(typeof b.r === "string" ? b.r : "", ctx.ownHost),
     m: b.m === 1 || b.m === true ? 1 : 0,
   };
+  const place = ctx.locate?.(ctx.ip);
+  if (place) {
+    visit.c = place.c;
+    if (place.l) visit.l = place.l;
+  }
+  return visit;
 }
 
 function isVisit(e: unknown): e is Visit {
@@ -168,6 +187,12 @@ export interface Summary {
   referrers: { host: string; visitors: number; views: number }[];
   devices: { mobile: number; desktop: number };
   withAddress: { views: number; visitors: number };
+  /** Busiest first, by distinct visitors. */
+  countries: { code: string; visitors: number; views: number }[];
+  /** Busiest first; a place is only as precise as the database. */
+  cities: { code: string; place: string; visitors: number; views: number }[];
+  /** Distinct visitors whose country is known. */
+  located: number;
 }
 
 export function summarise(visits: readonly Visit[], now: number, tz: string, span = 30): Summary {
@@ -183,6 +208,9 @@ export function summarise(visits: readonly Visit[], now: number, tz: string, spa
   const mobile = new Set<string>();
   const desktop = new Set<string>();
   const addressed = new Set<string>();
+  const countries = new Map<string, { views: number; visitors: Set<string> }>();
+  const cities = new Map<string, { code: string; place: string; views: number; visitors: Set<string> }>();
+  const located = new Set<string>();
   let todayViews = 0;
   let weekViews = 0;
   let addressedViews = 0;
@@ -216,6 +244,20 @@ export function summarise(visits: readonly Visit[], now: number, tz: string, spa
       addressedViews++;
       addressed.add(v.v);
     }
+    if (v.c) {
+      located.add(v.v);
+      const country = countries.get(v.c) ?? { views: 0, visitors: new Set<string>() };
+      country.views++;
+      country.visitors.add(v.v);
+      countries.set(v.c, country);
+      if (v.l) {
+        const k = `${v.c}|${v.l}`;
+        const city = cities.get(k) ?? { code: v.c, place: v.l, views: 0, visitors: new Set<string>() };
+        city.views++;
+        city.visitors.add(v.v);
+        cities.set(k, city);
+      }
+    }
   }
 
   return {
@@ -233,6 +275,15 @@ export function summarise(visits: readonly Visit[], now: number, tz: string, spa
       .slice(0, 8),
     devices: { mobile: mobile.size, desktop: desktop.size },
     withAddress: { views: addressedViews, visitors: addressed.size },
+    countries: [...countries.entries()]
+      .map(([code, c]) => ({ code, visitors: c.visitors.size, views: c.views }))
+      .sort((a, b) => b.visitors - a.visitors || b.views - a.views || a.code.localeCompare(b.code))
+      .slice(0, 12),
+    cities: [...cities.values()]
+      .map((c) => ({ code: c.code, place: c.place, visitors: c.visitors.size, views: c.views }))
+      .sort((a, b) => b.visitors - a.visitors || b.views - a.views || a.place.localeCompare(b.place))
+      .slice(0, 12),
+    located: located.size,
   };
 }
 

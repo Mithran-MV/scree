@@ -8,6 +8,7 @@
  */
 import type { Summary } from "./visits";
 import { columnPath, intTicks } from "@/render/charts";
+import { countryName, flag } from "./geo";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ESCAPES[c]!);
@@ -90,6 +91,30 @@ export function renderStats(s: Summary): string {
       </section>
       <section class="pair">
         <div class="card">
+          <h2>Countries</h2>
+          <p class="sub">${num(s.located)} of ${plural(s.totals.visitors, "visitor")} located.</p>
+          ${
+            s.countries.length
+              ? `<table><thead><tr><th>Country</th><th class="n">Visitors</th><th class="n">Views</th></tr></thead><tbody>${s.countries
+                  .map((c) => `<tr><td><span class="flag">${flag(c.code)}</span>${esc(countryName(c.code))}</td><td class="n">${num(c.visitors)}</td><td class="n">${num(c.views)}</td></tr>`)
+                  .join("")}</tbody></table>`
+              : `<p class="dim">No locations yet.</p>`
+          }
+        </div>
+        <div class="card">
+          <h2>Cities</h2>
+          <p class="sub">As precise as a free address database gets; phones and VPNs often land a city or two away.</p>
+          ${
+            s.cities.length
+              ? `<table><thead><tr><th>Place</th><th class="n">Visitors</th><th class="n">Views</th></tr></thead><tbody>${s.cities
+                  .map((c) => `<tr><td><span class="flag">${flag(c.code)}</span>${esc(c.place)}</td><td class="n">${num(c.visitors)}</td><td class="n">${num(c.views)}</td></tr>`)
+                  .join("")}</tbody></table>`
+              : `<p class="dim">No cities yet.</p>`
+          }
+        </div>
+      </section>
+      <section class="pair">
+        <div class="card">
           <h2>Where they came from</h2>
           <table><thead><tr><th>Source</th><th class="n">Visitors</th><th class="n">Views</th></tr></thead><tbody>${refRows}</tbody></table>
         </div>
@@ -141,6 +166,7 @@ export function renderStats(s: Summary): string {
   th { color: var(--dim); font-weight: 400; font-size: 12px; }
   td.n, th.n { text-align: right; font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
   .dim { color: var(--dim); }
+  .flag { display: inline-block; width: 1.6em; }
   .empty p { margin: 0; color: var(--dim); }
   .foot { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; color: var(--dim); font-size: 13px; }
   button { font: 13px "IBM Plex Sans", system-ui, sans-serif; color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 7px 12px; cursor: pointer; }
@@ -153,12 +179,13 @@ export function renderStats(s: Summary): string {
   <header>
     <span class="kicker">SCREE · PRIVATE</span>
     <h1>Visitors</h1>
-    <p class="lede">${esc(since)} Only someone with the password can see this page. No addresses are stored and nothing is set on a visitor's device; crawlers and headless browsers are not counted.</p>
+    <p class="lede">${esc(since)} Only someone with the password can see this page. No addresses are stored and nothing is set on a visitor's device; the country and city are looked up on the server from a local database. Crawlers and headless browsers are not counted.</p>
   </header>
   ${body}
   <footer class="foot">
     <button type="button" id="nocount" aria-pressed="false">Do not count this browser</button>
     <span>Updated ${esc(when(s.generatedAt, s.tz))}. <a href="?">Refresh</a> · <a href="?format=json">JSON</a></span>
+    <span><a href="https://db-ip.com" rel="noreferrer">IP Geolocation by DB-IP</a>, CC BY 4.0</span>
   </footer>
 </main>
 <script>

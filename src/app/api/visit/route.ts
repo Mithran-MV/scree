@@ -1,4 +1,5 @@
 import { appendVisit, clientIp, isBot, sameSite, toVisit, visitsFile } from "@/analytics/visits";
+import { locator } from "@/analytics/geo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
     salt: process.env.STATS_SALT || process.env.STATS_PASSWORD || "scree",
     now: Date.now(),
     ownHost: get("x-forwarded-host") ?? get("host"),
+    locate: await locator(),
   });
   if (visit) {
     try {
