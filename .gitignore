@@ -26,3 +26,6 @@ next-env.d.ts
 
 # Production build output, so a `next build` cannot clobber a running dev server
 /.next-build
+
+# The private visit count, when run locally without VISITS_FILE
+/.data

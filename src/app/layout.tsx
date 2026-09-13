@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Cinzel, EB_Garamond, IBM_Plex_Mono, Press_Start_2P } from "next/font/google";
 import "./globals.css";
+import { VisitBeacon } from "@/components/VisitBeacon";
 
 /**
  * Four faces, one rule. Names and titles are cut in Roman capitals, prose is
@@ -31,7 +32,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${cinzel.variable} ${garamond.variable} ${plex.variable} ${pixel.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <VisitBeacon />
+      </body>
     </html>
   );
 }

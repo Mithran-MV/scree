@@ -62,3 +62,22 @@ export function barPath(x: number, y: number, w: number, h: number, r = 4): stri
   const rr = Math.min(r, w, h / 2);
   return `M${x} ${y} h${w - rr} a${rr} ${rr} 0 0 1 ${rr} ${rr} v${h - 2 * rr} a${rr} ${rr} 0 0 1 -${rr} ${rr} h-${w - rr} z`;
 }
+
+/** Whole-number ticks from zero to at least `max`, for counts that cannot be fractional. */
+export function intTicks(max: number, count = 4): number[] {
+  const top = Math.max(1, Math.ceil(max));
+  const step = Math.max(1, Math.ceil(niceInterval(top, count)));
+  const out: number[] = [];
+  for (let v = 0; v < top + step; v += step) {
+    out.push(v);
+    if (v >= top) break;
+  }
+  return out;
+}
+
+/** A vertical column with a rounded data-end at the top and a square baseline, as an SVG path. */
+export function columnPath(x: number, y: number, w: number, h: number, r = 4): string {
+  if (w <= 0 || h <= 0) return "";
+  const rr = Math.min(r, w / 2, h);
+  return `M${x} ${y + h} V${y + rr} a${rr} ${rr} 0 0 1 ${rr} -${rr} h${w - 2 * rr} a${rr} ${rr} 0 0 1 ${rr} ${rr} V${y + h} z`;
+}

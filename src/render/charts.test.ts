@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barPath, cliffBelowSpot, cumulativePaid, ticks, utilisation } from "./charts";
+import { barPath, cliffBelowSpot, columnPath, cumulativePaid, intTicks, ticks, utilisation } from "./charts";
 
 describe("chart arithmetic", () => {
   it("makes clean ticks that reach the maximum", () => {
@@ -37,5 +37,23 @@ describe("chart arithmetic", () => {
     expect(barPath(10, 20, 100, 14)).toBe("M10 20 h96 a4 4 0 0 1 4 4 v6 a4 4 0 0 1 -4 4 h-96 z");
     expect(barPath(0, 0, 0, 14)).toBe("");
     expect(barPath(0, 0, 2, 14)).toMatch(/^M0 0 h0 a2 2/);
+  });
+});
+
+describe("counts", () => {
+  it("ticks whole numbers from zero past the maximum", () => {
+    expect(intTicks(0)).toEqual([0, 1]);
+    expect(intTicks(3)).toEqual([0, 1, 2, 3]);
+    const t = intTicks(47, 4);
+    expect(t[0]).toBe(0);
+    expect(t.every((v) => Number.isInteger(v))).toBe(true);
+    expect(t[t.length - 1]).toBeGreaterThanOrEqual(47);
+    expect(t.length).toBeLessThanOrEqual(7);
+  });
+
+  it("draws a column rounded at the top only", () => {
+    expect(columnPath(10, 20, 20, 100)).toBe("M10 120 V24 a4 4 0 0 1 4 -4 h12 a4 4 0 0 1 4 4 V120 z");
+    expect(columnPath(0, 0, 20, 0)).toBe("");
+    expect(columnPath(0, 10, 20, 2)).toBe("M0 12 V12 a2 2 0 0 1 2 -2 h16 a2 2 0 0 1 2 2 V12 z");
   });
 });
